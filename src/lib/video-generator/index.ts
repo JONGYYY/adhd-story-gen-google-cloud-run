@@ -1,4 +1,4 @@
-import { VideoOptions, SubredditStory, VideoSegment, VideoMetadata } from './types';
+import { VideoOptions, SubredditStory, VideoSegment, VideoMetadata, VideoGenerationOptions } from './types';
 import { generateStory } from '../story-generator/openai';
 import { selectBackgroundClips, processBackgroundClip } from './background';
 import { generateSpeech, getAudioDuration } from './voice';
@@ -47,5 +47,10 @@ export async function generateVideo(options: VideoOptions, videoId: string): Pro
     });
   }
 
-  return generateMoviePyVideo({ ...options, story }, videoId);
+  const generationOptions: VideoGenerationOptions = {
+    ...options,
+    story,
+  };
+
+  return generateMoviePyVideo(generationOptions, videoId);
 } 

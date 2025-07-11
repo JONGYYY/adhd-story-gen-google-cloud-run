@@ -48,6 +48,10 @@ export type VideoOptions = {
   };
 };
 
+export type VideoGenerationOptions = VideoOptions & {
+  story: SubredditStory;
+};
+
 export type VideoSegment = {
   text: string;
   start: number;

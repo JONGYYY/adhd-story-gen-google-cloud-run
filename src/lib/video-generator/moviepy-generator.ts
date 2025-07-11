@@ -1,4 +1,4 @@
-import { VideoOptions, SubredditStory, VideoSegment } from './types';
+import { VideoOptions, SubredditStory, VideoSegment, VideoGenerationOptions } from './types';
 import { generateStory } from '../story-generator/openai';
 import { generateSpeech, getAudioDuration } from './voice';
 import { updateProgress, setVideoReady, setVideoFailed } from './status';
@@ -59,7 +59,7 @@ async function saveBannerToFile(bannerBuffer: Buffer, videoId: string): Promise<
 }
 
 export async function generateVideo(
-  options: VideoOptions & { story: SubredditStory },
+  options: VideoGenerationOptions,
   videoId: string
 ): Promise<string> {
   try {
