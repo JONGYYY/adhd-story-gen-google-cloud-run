@@ -2,6 +2,7 @@ import { PostVideoParams, PostVideoResult, SocialMediaCredentials } from './type
 import { getSocialMediaCredentials } from './schema';
 import FormData from 'form-data';
 import fs from 'fs';
+import { Readable } from 'stream';
 
 export async function postVideo(userId: string, params: PostVideoParams): Promise<PostVideoResult> {
   try {
@@ -66,16 +67,14 @@ async function postToYouTube(
   const uploadUrl = initResponse.headers.get('location')!;
 
   // Upload the video file
-  const form = new FormData();
-  form.append('video', fs.createReadStream(params.videoPath), {
-    filename: 'video.mp4',
-    contentType: 'video/mp4'
-  });
-  
+  const videoBuffer = fs.readFileSync(params.videoPath);
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
-    body: form,
-    headers: form.getHeaders()
+    body: videoBuffer,
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Length': videoBuffer.length.toString()
+    }
   });
 
   if (!uploadResponse.ok) {
@@ -107,17 +106,23 @@ async function postToTikTok(
     throw new Error('Failed to get TikTok upload URL');
   }
 
-  // Prepare the video upload
+  // Prepare the video upload for TikTok
   const form = new FormData();
   form.append('video', fs.createReadStream(params.videoPath), {
     filename: 'video.mp4',
     contentType: 'video/mp4'
   });
   
+  // Convert form to buffer for fetch
+  const formBuffer = await new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    form.pipe(Readable.from([])).on('data', chunk => chunks.push(chunk)).on('end', () => resolve(Buffer.concat(chunks))).on('error', reject);
+  });
+  
   // Upload the video
   const uploadResponse = await fetch(data.upload_url, {
     method: 'POST',
-    body: form,
+    body: formBuffer,
     headers: form.getHeaders()
   });
 
