@@ -1,6 +1,6 @@
 import { PostVideoParams, PostVideoResult, SocialMediaCredentials } from './types';
 import { getSocialMediaCredentials } from './schema';
-import * as FormData from 'form-data';
+import FormData from 'form-data';
 import fs from 'fs';
 
 export async function postVideo(userId: string, params: PostVideoParams): Promise<PostVideoResult> {
@@ -67,14 +67,15 @@ async function postToYouTube(
 
   // Upload the video file
   const form = new FormData();
-  form.append('video', fs.createReadStream(params.videoPath));
+  form.append('video', fs.createReadStream(params.videoPath), {
+    filename: 'video.mp4',
+    contentType: 'video/mp4'
+  });
   
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
     body: form,
-    headers: {
-      ...form.getHeaders()
-    }
+    headers: form.getHeaders()
   });
 
   if (!uploadResponse.ok) {
@@ -108,15 +109,16 @@ async function postToTikTok(
 
   // Prepare the video upload
   const form = new FormData();
-  form.append('video', fs.createReadStream(params.videoPath));
+  form.append('video', fs.createReadStream(params.videoPath), {
+    filename: 'video.mp4',
+    contentType: 'video/mp4'
+  });
   
   // Upload the video
   const uploadResponse = await fetch(data.upload_url, {
     method: 'POST',
     body: form,
-    headers: {
-      ...form.getHeaders()
-    }
+    headers: form.getHeaders()
   });
 
   if (!uploadResponse.ok) {
