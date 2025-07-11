@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateVideo } from '@/lib/video-generator';
 import { VideoOptions, SubredditStory, VideoGenerationOptions } from '@/lib/video-generator/types';
 import { generateStory } from '@/lib/story-generator/openai';
-import { createVideoStatus, setVideoReady, setVideoFailed } from '@/lib/video-generator/status';
+import { createVideoStatus, setVideoReady, setVideoFailed, updateVideoStatus } from '@/lib/video-generator/status';
 
 export async function POST(request: NextRequest) {
   const videoId = uuidv4();
@@ -48,33 +48,32 @@ export async function POST(request: NextRequest) {
       throw new Error('Story is missing required fields (title or story content)');
     }
 
-    // Start video generation
-    console.log('Starting video generation with story:', JSON.stringify(story, null, 2));
-    
+    // Update status with title and description
+    await updateVideoStatus(videoId, {
+      title: story.title,
+      description: story.story
+    });
+
+    // Generate video
     const generationOptions: VideoGenerationOptions = {
       ...options,
       story,
     };
-    
-    const outputPath = await generateVideo(generationOptions, videoId);
 
-    // Update status to ready
-    await setVideoReady(videoId, outputPath);
+    const videoUrl = await generateVideo(generationOptions, videoId);
+    await setVideoReady(videoId, videoUrl);
 
     return NextResponse.json({
       success: true,
       videoId,
-      outputPath,
+      title: story.title,
+      description: story.story
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate video';
-    console.error('Error generating video:', error);
-    
-    // Update status to failed
-    await setVideoFailed(videoId, errorMessage);
-    
+    console.error('Video generation error:', error);
+    await setVideoFailed(videoId, error instanceof Error ? error.message : 'Unknown error occurred');
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Failed to generate video' },
       { status: 500 }
     );
   }

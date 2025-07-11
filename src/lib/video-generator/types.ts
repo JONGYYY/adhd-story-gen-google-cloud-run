@@ -75,4 +75,6 @@ export type VideoStatus = {
   progress?: number;
   videoUrl?: string;
   error?: string;
+  title?: string;
+  description?: string;
 }; 

@@ -12,7 +12,7 @@ export interface SocialMediaCredentials {
 
 export interface PostVideoParams {
   platform: SocialPlatform;
-  videoPath: string;
+  videoFile: File;
   title: string;
   description?: string;
   tags?: string[];

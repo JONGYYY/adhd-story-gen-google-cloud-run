@@ -14,19 +14,33 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get request body
-    const body = await request.json() as PostVideoParams;
+    // Get form data
+    const formData = await request.formData();
+    const videoFile = formData.get('video') as File;
+    const platform = formData.get('platform') as string;
+    const title = formData.get('title') as string;
+    const description = formData.get('description') as string;
+    const tags = formData.get('tags') ? JSON.parse(formData.get('tags') as string) : undefined;
     
     // Validate request
-    if (!body.platform || !body.videoPath || !body.title) {
+    if (!platform || !videoFile || !title) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
+    // Construct params
+    const params: PostVideoParams = {
+      platform: platform as any, // Type assertion since we validate supported platforms in postVideo
+      videoFile,
+      title,
+      description,
+      tags
+    };
+
     // Post video
-    const result = await postVideo(currentUser.uid, body);
+    const result = await postVideo(currentUser.uid, params);
 
     return new Response(JSON.stringify(result), {
       status: result.success ? 200 : 400,
