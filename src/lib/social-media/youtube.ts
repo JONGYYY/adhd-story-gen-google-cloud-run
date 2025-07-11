@@ -1,5 +1,5 @@
 import { OAuth2Client } from 'google-auth-library';
-import { google } from 'googleapis';
+import { google, youtube_v3 } from 'googleapis';
 import fs from 'fs';
 
 const YOUTUBE_OAUTH_CONFIG = {
@@ -47,10 +47,8 @@ export class YouTubeAPI {
         access_token: accessToken
       });
 
-      const youtube = google.youtube({
-        version: 'v3',
-        auth: this.oauth2Client
-      });
+      const youtube = google.youtube('v3');
+      youtube.options.auth = this.oauth2Client;
 
       const fileSize = fs.statSync(videoData.filePath).size;
 
