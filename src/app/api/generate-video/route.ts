@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { generateVideo } from '@/lib/video-generator';
-import { VideoOptions, SubredditStory } from '@/lib/video-generator/types';
+import { VideoOptions, SubredditStory, VideoGenerationOptions } from '@/lib/video-generator/types';
 import { generateStory } from '@/lib/story-generator/openai';
 import { createVideoStatus, setVideoReady, setVideoFailed } from '@/lib/video-generator/status';
 
@@ -51,10 +51,12 @@ export async function POST(request: NextRequest) {
     // Start video generation
     console.log('Starting video generation with story:', JSON.stringify(story, null, 2));
     
-    const outputPath = await generateVideo({
+    const generationOptions: VideoGenerationOptions = {
       ...options,
       story,
-    }, videoId);
+    };
+    
+    const outputPath = await generateVideo(generationOptions, videoId);
 
     // Update status to ready
     await setVideoReady(videoId, outputPath);
