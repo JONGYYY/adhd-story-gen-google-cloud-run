@@ -4,15 +4,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { PageContainer } from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
-import { PostVideo } from '@/components/social-media/post-video';
 
 type VideoStatus = {
   status: 'generating' | 'ready' | 'failed';
   progress?: number;
   videoUrl?: string;
   error?: string;
-  title?: string;
-  description?: string;
 };
 
 export default function VideoPage() {
@@ -179,16 +176,6 @@ export default function VideoPage() {
                     Create Another
                   </Button>
                 </div>
-
-                {/* Add social media posting component */}
-                {!videoError && (
-                  <PostVideo
-                    videoId={videoId}
-                    videoUrl={videoStatus.videoUrl}
-                    title={videoStatus.title || 'My Video'}
-                    description={videoStatus.description}
-                  />
-                )}
               </div>
             )}
 

@@ -53,9 +53,7 @@ export async function getVideoStatus(videoId: string): Promise<VideoStatus> {
 }
 
 export async function setVideoReady(videoId: string, videoUrl: string): Promise<void> {
-  const currentStatus = await getVideoStatus(videoId);
   await updateVideoStatus(videoId, {
-    ...currentStatus,
     status: 'ready',
     progress: 100,
     videoUrl,
@@ -63,9 +61,7 @@ export async function setVideoReady(videoId: string, videoUrl: string): Promise<
 }
 
 export async function setVideoFailed(videoId: string, error: string): Promise<void> {
-  const currentStatus = await getVideoStatus(videoId);
   await updateVideoStatus(videoId, {
-    ...currentStatus,
     status: 'failed',
     error,
   });
