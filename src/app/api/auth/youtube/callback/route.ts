@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
     const youtubeApi = new YouTubeAPI();
     const tokens = await youtubeApi.getTokensFromCode(code);
 
+    if (!tokens.access_token) {
+      return NextResponse.redirect('/settings/social-media?error=No access token received');
+    }
+
     // Get user info from YouTube
     const response = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', {
       headers: {
@@ -30,12 +34,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect('/settings/social-media?error=Not authenticated');
     }
 
-    await setSocialMediaCredentials(currentUser.uid, 'youtube', {
+    // Ensure we have the required fields
+    const credentials = {
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      refreshToken: tokens.refresh_token || undefined,
       username: channelInfo.title,
-      expiresAt: Date.now() + (tokens.expiry_date || 3600000),
-    });
+      expiresAt: tokens.expiry_date ? Date.now() + tokens.expiry_date : Date.now() + 3600000,
+      platform: 'youtube' as const,
+      userId: currentUser.uid,
+      profileId: data.items[0].id
+    };
+
+    await setSocialMediaCredentials(currentUser.uid, 'youtube', credentials);
 
     return NextResponse.redirect('/settings/social-media?success=YouTube connected successfully');
   } catch (error) {

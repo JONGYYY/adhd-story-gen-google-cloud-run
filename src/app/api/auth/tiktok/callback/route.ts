@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
     const tiktokApi = new TikTokAPI();
     const tokens = await tiktokApi.getAccessToken(code);
 
-    if (tokens.error) {
-      return NextResponse.redirect(`/settings/social-media?error=${tokens.error}`);
+    if (tokens.error || !tokens.access_token) {
+      return NextResponse.redirect(`/settings/social-media?error=${tokens.error || 'No access token received'}`);
     }
 
     // Get user info
@@ -29,12 +29,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect('/settings/social-media?error=Not authenticated');
     }
 
-    await setSocialMediaCredentials(currentUser.uid, 'tiktok', {
+    const credentials = {
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      refreshToken: tokens.refresh_token || undefined,
       username: userInfo.username,
-      expiresAt: Date.now() + (tokens.expires_in * 1000),
-    });
+      expiresAt: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : Date.now() + 3600000,
+      platform: 'tiktok' as const,
+      userId: currentUser.uid,
+      profileId: userInfo.open_id
+    };
+
+    await setSocialMediaCredentials(currentUser.uid, 'tiktok', credentials);
 
     return NextResponse.redirect('/settings/social-media?success=TikTok connected successfully');
   } catch (error) {
