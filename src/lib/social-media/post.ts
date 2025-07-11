@@ -1,6 +1,6 @@
 import { PostVideoParams, PostVideoResult, SocialMediaCredentials } from './types';
 import { getSocialMediaCredentials } from './schema';
-import FormData from 'form-data';
+import * as FormData from 'form-data';
 import fs from 'fs';
 
 export async function postVideo(userId: string, params: PostVideoParams): Promise<PostVideoResult> {
