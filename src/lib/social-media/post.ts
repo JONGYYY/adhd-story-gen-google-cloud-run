@@ -2,7 +2,7 @@ import { PostVideoParams, PostVideoResult, SocialMediaCredentials } from './type
 import { getSocialMediaCredentials } from './schema';
 import FormData from 'form-data';
 import fs from 'fs';
-import { Readable } from 'stream';
+import { PassThrough } from 'stream';
 
 export async function postVideo(userId: string, params: PostVideoParams): Promise<PostVideoResult> {
   try {
@@ -116,7 +116,13 @@ async function postToTikTok(
   // Convert form to buffer for fetch
   const formBuffer = await new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
-    form.pipe(Readable.from([])).on('data', chunk => chunks.push(chunk)).on('end', () => resolve(Buffer.concat(chunks))).on('error', reject);
+    const passThrough = new PassThrough();
+    
+    passThrough.on('data', chunk => chunks.push(Buffer.from(chunk)));
+    passThrough.on('end', () => resolve(Buffer.concat(chunks)));
+    passThrough.on('error', reject);
+    
+    form.pipe(passThrough);
   });
   
   // Upload the video
