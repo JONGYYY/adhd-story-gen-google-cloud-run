@@ -3,6 +3,20 @@ import { SocialMediaCredentials, SocialPlatform } from './types';
 
 const COLLECTION_NAME = 'socialMediaCredentials';
 
+export async function setSocialMediaCredentials(
+  userId: string,
+  platform: SocialPlatform,
+  credentials: Partial<SocialMediaCredentials>
+) {
+  const db = getFirestore();
+  const docRef = doc(db, COLLECTION_NAME, `${userId}_${platform}`);
+  await setDoc(docRef, {
+    ...credentials,
+    platform,
+    updatedAt: Date.now()
+  }, { merge: true });
+}
+
 export async function saveSocialMediaCredentials(
   userId: string,
   credentials: SocialMediaCredentials
