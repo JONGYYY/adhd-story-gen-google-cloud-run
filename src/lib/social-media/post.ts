@@ -1,5 +1,7 @@
 import { PostVideoParams, PostVideoResult, SocialMediaCredentials } from './types';
 import { getSocialMediaCredentials } from './schema';
+import * as FormData from 'form-data';
+import fs from 'fs';
 
 export async function postVideo(userId: string, params: PostVideoParams): Promise<PostVideoResult> {
   try {
@@ -35,18 +37,14 @@ async function postToYouTube(
   credentials: SocialMediaCredentials,
   params: PostVideoParams
 ): Promise<PostVideoResult> {
-  if (!params.videoFile) {
-    throw new Error('Video file is required for upload');
-  }
-
   // First, initiate the upload
   const initResponse = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${credentials.accessToken}`,
       'Content-Type': 'application/json',
-      'X-Upload-Content-Type': params.videoFile.type,
-      'X-Upload-Content-Length': params.videoFile.size.toString()
+      'X-Upload-Content-Type': 'video/*',
+      'X-Upload-Content-Length': fs.statSync(params.videoPath).size.toString()
     },
     body: JSON.stringify({
       snippet: {
@@ -68,11 +66,14 @@ async function postToYouTube(
   const uploadUrl = initResponse.headers.get('location')!;
 
   // Upload the video file
+  const form = new FormData();
+  form.append('video', fs.createReadStream(params.videoPath));
+  
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
-    body: params.videoFile,
+    body: form,
     headers: {
-      'Content-Type': params.videoFile.type
+      ...form.getHeaders()
     }
   });
 
@@ -92,10 +93,6 @@ async function postToTikTok(
   credentials: SocialMediaCredentials,
   params: PostVideoParams
 ): Promise<PostVideoResult> {
-  if (!params.videoFile) {
-    throw new Error('Video file is required for upload');
-  }
-
   // First, initiate the upload
   const initResponse = await fetch('https://open-api.tiktok.com/share/video/upload/', {
     method: 'POST',
@@ -111,12 +108,15 @@ async function postToTikTok(
 
   // Prepare the video upload
   const form = new FormData();
-  form.append('video', params.videoFile);
+  form.append('video', fs.createReadStream(params.videoPath));
   
   // Upload the video
   const uploadResponse = await fetch(data.upload_url, {
     method: 'POST',
-    body: form
+    body: form,
+    headers: {
+      ...form.getHeaders()
+    }
   });
 
   if (!uploadResponse.ok) {
@@ -135,10 +135,6 @@ async function postToInstagram(
   credentials: SocialMediaCredentials,
   params: PostVideoParams
 ): Promise<PostVideoResult> {
-  if (!params.videoFile) {
-    throw new Error('Video file is required for upload');
-  }
-
   // First, create a container
   const containerResponse = await fetch(`https://graph.instagram.com/v12.0/${credentials.userId}/media`, {
     method: 'POST',
@@ -147,7 +143,7 @@ async function postToInstagram(
     },
     body: new URLSearchParams({
       media_type: 'REELS',
-      video_url: URL.createObjectURL(params.videoFile),
+      video_url: params.videoPath,
       caption: `${params.title}\n\n${params.description || ''}`
     })
   });
