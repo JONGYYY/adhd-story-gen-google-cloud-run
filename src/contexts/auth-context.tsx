@@ -74,6 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Handle auth state changes
   useEffect(() => {
+    // Check if Firebase auth is properly initialized
+    if (!auth) {
+      console.error('Firebase auth is not initialized');
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
 
@@ -88,7 +95,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
           console.error('Error in auth state change:', error);
           // If session creation fails, sign out
-          await signOut(auth);
+          try {
+            await signOut(auth);
+          } catch (signOutError) {
+            console.error('Error signing out after session creation failure:', signOutError);
+          }
           setUser(null);
         }
       }
@@ -100,18 +111,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const signIn = async (email: string, password: string) => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
     const result = await signInWithEmailAndPassword(auth, email, password);
     await createSession(result.user);
     router.push(getRedirectPath());
   };
 
   const signUp = async (email: string, password: string) => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
     const result = await createUserWithEmailAndPassword(auth, email, password);
     await createSession(result.user);
     router.push(getRedirectPath());
   };
 
   const signInWithGoogle = async () => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
     await createSession(result.user);
@@ -119,15 +139,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
     await signOut(auth);
     // Clear the session cookie
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-    });
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Error clearing session cookie:', error);
+    }
     router.push('/auth/login');
   };
 
   const resetPassword = async (email: string) => {
+    if (!auth) {
+      throw new Error('Firebase auth is not initialized');
+    }
     await sendPasswordResetEmail(auth, email);
   };
 

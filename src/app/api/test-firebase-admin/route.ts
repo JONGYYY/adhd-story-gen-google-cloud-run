@@ -41,6 +41,23 @@ export async function GET() {
         formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
       }
 
+      // Validate private key format
+      if (!formattedPrivateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid private key format - missing BEGIN marker',
+          envCheck
+        }, { status: 500 });
+      }
+
+      if (!formattedPrivateKey.includes('-----END PRIVATE KEY-----')) {
+        return NextResponse.json({
+          success: false,
+          error: 'Invalid private key format - missing END marker',
+          envCheck
+        }, { status: 500 });
+      }
+
       app = initializeApp({
         credential: cert({
           projectId,
@@ -67,7 +84,8 @@ export async function GET() {
         success: true,
         message: 'Firebase Admin SDK is working correctly',
         envCheck,
-        usersCount: listUsersResult.users.length
+        usersCount: listUsersResult.users.length,
+        projectId: projectId
       });
     } catch (listError: any) {
       console.error('Error listing users:', listError);
@@ -85,7 +103,8 @@ export async function GET() {
             success: true,
             message: 'Firebase Admin SDK is working correctly (token verification test passed)',
             envCheck,
-            note: 'List users failed but SDK is functional'
+            note: 'List users failed but SDK is functional',
+            projectId: projectId
           });
         } else {
           throw verifyError;

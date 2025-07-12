@@ -10,6 +10,16 @@ const isProduction = process.env.NODE_ENV === 'production';
 export async function POST(request: Request) {
   try {
     console.log('Session creation request received');
+    
+    // Validate request
+    if (!request.body) {
+      console.error('No request body provided');
+      return new NextResponse(
+        JSON.stringify({ error: 'No request body provided' }),
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     console.log('Request body keys:', Object.keys(body));
     
@@ -23,11 +33,27 @@ export async function POST(request: Request) {
       );
     }
 
+    if (typeof idToken !== 'string') {
+      console.error('Invalid idToken type:', typeof idToken);
+      return new NextResponse(
+        JSON.stringify({ error: 'Invalid ID token format' }),
+        { status: 400 }
+      );
+    }
+
     console.log('ID token received, length:', idToken.length);
     console.log('Creating session cookie...');
     
     // Create a session cookie using Firebase Admin
     const sessionCookie = await createSessionCookie(idToken, expiresIn);
+
+    if (!sessionCookie) {
+      console.error('Failed to create session cookie - no cookie returned');
+      return new NextResponse(
+        JSON.stringify({ error: 'Failed to create session cookie' }),
+        { status: 500 }
+      );
+    }
 
     console.log('Session cookie created successfully, length:', sessionCookie.length);
     

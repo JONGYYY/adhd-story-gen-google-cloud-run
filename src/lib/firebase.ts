@@ -13,29 +13,55 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
-let app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Validate Firebase configuration
+const requiredConfigKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
+const missingKeys = requiredConfigKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig]);
 
-// Enable offline persistence
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db)
-    .catch((err) => {
-      if (err.code === 'failed-precondition') {
-        console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
-      } else if (err.code === 'unimplemented') {
-        console.warn('The current browser doesn\'t support persistence.');
-      }
-    });
+if (missingKeys.length > 0) {
+  console.error('Missing Firebase configuration keys:', missingKeys);
+  if (typeof window !== 'undefined') {
+    console.error('Firebase configuration is incomplete. Please check your environment variables.');
+  }
 }
 
-// Initialize Analytics
-let analytics = null;
-if (typeof window !== 'undefined') {
-  // Only initialize analytics on the client side
-  isSupported().then(yes => yes && getAnalytics(app))
-    .catch(err => console.error('Failed to initialize analytics:', err));
+// Initialize Firebase only if we have the required configuration
+let app;
+let auth;
+let db;
+
+try {
+  if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApps()[0];
+  }
+  
+  auth = getAuth(app);
+  db = getFirestore(app);
+
+  // Enable offline persistence only on client side
+  if (typeof window !== 'undefined') {
+    enableIndexedDbPersistence(db)
+      .catch((err) => {
+        if (err.code === 'failed-precondition') {
+          console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+        } else if (err.code === 'unimplemented') {
+          console.warn('The current browser doesn\'t support persistence.');
+        }
+      });
+  }
+
+  // Initialize Analytics only on client side
+  let analytics = null;
+  if (typeof window !== 'undefined') {
+    isSupported().then(yes => yes && getAnalytics(app))
+      .catch(err => console.error('Failed to initialize analytics:', err));
+  }
+} catch (error) {
+  console.error('Failed to initialize Firebase:', error);
+  // Create fallback objects to prevent crashes
+  auth = null;
+  db = null;
 }
 
-export { auth, analytics, db }; 
+export { auth, db }; 
