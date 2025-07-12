@@ -53,11 +53,14 @@ export const SUBREDDIT_CONFIGS = {
       [StoryCategory.DRAMA]: ['drama', 'relationship', 'family'],
     }
   }
-};
+} as const;
+
+// Type for valid subreddit keys
+type SubredditKey = keyof typeof SUBREDDIT_CONFIGS;
 
 // Determine story category based on title and content
 export function categorizeStory(title: string, content: string, subreddit: string): StoryCategory {
-  const config = SUBREDDIT_CONFIGS[subreddit];
+  const config = SUBREDDIT_CONFIGS[subreddit as SubredditKey];
   if (!config) return StoryCategory.DRAMA;
 
   const text = `${title} ${content}`.toLowerCase();
