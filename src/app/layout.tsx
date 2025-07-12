@@ -5,6 +5,7 @@ import { GeistMono } from 'geist/font/mono';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Navigation } from '@/components/Navigation';
 import { AuthProvider } from '@/contexts/auth-context';
+import { ClientOnlyWithSuspense } from '@/components/client-only';
 import '@/styles/globals.css';
 
 export const viewport: Viewport = {
@@ -52,31 +53,32 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* WARNING: AuthProvider uses useSearchParams and must only be used in client components. If SSR errors occur, move AuthProvider to a client-only wrapper. */}
-          <AuthProvider>
-            <div className="relative min-h-screen flex flex-col">
-              <Navigation />
-              <main className="flex-1">{children}</main>
-              <footer className="w-full border-t py-6 md:py-0">
-                <div className="container flex flex-col items-center justify-between gap-4 md:h-16 md:flex-row">
-                  <p className="text-sm text-muted-foreground">
-                    © {new Date().getFullYear()} StoryGen AI. All rights reserved.
-                  </p>
-                  <nav className="flex items-center gap-4 text-sm">
-                    <a href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
-                      Privacy
-                    </a>
-                    <a href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
-                      Terms
-                    </a>
-                    <a href="/contact" className="text-muted-foreground hover:text-foreground transition-colors">
-                      Contact
-                    </a>
-                  </nav>
-                </div>
-              </footer>
-            </div>
-          </AuthProvider>
+          <ClientOnlyWithSuspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+            <AuthProvider>
+              <div className="relative min-h-screen flex flex-col">
+                <Navigation />
+                <main className="flex-1">{children}</main>
+                <footer className="w-full border-t py-6 md:py-0">
+                  <div className="container flex flex-col items-center justify-between gap-4 md:h-16 md:flex-row">
+                    <p className="text-sm text-muted-foreground">
+                      © {new Date().getFullYear()} StoryGen AI. All rights reserved.
+                    </p>
+                    <nav className="flex items-center gap-4 text-sm">
+                      <a href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
+                        Privacy
+                      </a>
+                      <a href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
+                        Terms
+                      </a>
+                      <a href="/contact" className="text-muted-foreground hover:text-foreground transition-colors">
+                        Contact
+                      </a>
+                    </nav>
+                  </div>
+                </footer>
+              </div>
+            </AuthProvider>
+          </ClientOnlyWithSuspense>
         </ThemeProvider>
       </body>
     </html>
