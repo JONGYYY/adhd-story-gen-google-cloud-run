@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
 import { TikTokAPI } from '@/lib/social-media/tiktok';
 import { auth } from '@/lib/firebase';
@@ -10,14 +11,14 @@ export async function GET(request: NextRequest) {
     const state = searchParams.get('state');
     
     if (!code) {
-      return NextResponse.redirect('/settings/social-media?error=No authorization code received');
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=No authorization code received`);
     }
 
     const tiktokApi = new TikTokAPI();
     const tokens = await tiktokApi.getAccessToken(code);
 
     if (tokens.error || !tokens.access_token) {
-      return NextResponse.redirect(`/settings/social-media?error=${tokens.error || 'No access token received'}`);
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${tokens.error || 'No access token received'}`);
     }
 
     // Get user info
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     // Store credentials in Firebase
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      return NextResponse.redirect('/settings/social-media?error=Not authenticated');
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Not authenticated`);
     }
 
     const credentials = {
@@ -41,9 +42,9 @@ export async function GET(request: NextRequest) {
 
     await setSocialMediaCredentials(currentUser.uid, 'tiktok', credentials);
 
-    return NextResponse.redirect('/settings/social-media?success=TikTok connected successfully');
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?success=TikTok connected successfully`);
   } catch (error) {
     console.error('Error handling TikTok OAuth callback:', error);
-    return NextResponse.redirect('/settings/social-media?error=Failed to connect TikTok');
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Failed to connect TikTok`);
   }
 } 
