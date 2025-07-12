@@ -3,7 +3,7 @@
 import { getOAuthUrl } from '@/lib/social-media/oauth';
 import { getSocialMediaCredentials } from '@/lib/social-media/schema';
 import { SocialPlatform } from '@/lib/social-media/types';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/auth-context';
 import { useEffect, useState } from 'react';
 
 interface ConnectedPlatform {
@@ -18,16 +18,16 @@ export default function SocialMediaSettings() {
     { platform: 'tiktok', username: '', connected: false },
     { platform: 'instagram', username: '', connected: false }
   ]);
+  const { user } = useAuth();
 
   useEffect(() => {
     // Load connected platforms
     async function loadPlatforms() {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
+      if (!user) return;
 
       const updatedPlatforms = await Promise.all(
         platforms.map(async (p) => {
-          const creds = await getSocialMediaCredentials(currentUser.uid, p.platform);
+          const creds = await getSocialMediaCredentials(user.uid, p.platform);
           return {
             ...p,
             username: creds?.username || '',
@@ -40,7 +40,7 @@ export default function SocialMediaSettings() {
     }
 
     loadPlatforms();
-  }, []);
+  }, [user]);
 
   const handleConnect = (platform: SocialPlatform) => {
     const url = getOAuthUrl(platform);

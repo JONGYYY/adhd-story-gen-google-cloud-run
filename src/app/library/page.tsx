@@ -7,7 +7,7 @@ import { PageContainer } from '@/components/layout/page-container';
 import { SocialPlatform } from '@/lib/social-media/types';
 import { getSocialMediaCredentials } from '@/lib/social-media/schema';
 import { useEffect } from 'react';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/auth-context';
 
 interface PlatformStatus {
   platform: SocialPlatform;
@@ -20,17 +20,17 @@ export default function Library() {
   const [selectedPlatform, setSelectedPlatform] = useState<SocialPlatform | 'all'>('all');
   const [platformStatuses, setPlatformStatuses] = useState<PlatformStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
 
   const platforms: SocialPlatform[] = ['youtube', 'tiktok', 'instagram'];
 
   useEffect(() => {
     async function loadPlatformStatuses() {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
+      if (!user) return;
 
       const statuses = await Promise.all(
         platforms.map(async (platform) => {
-          const creds = await getSocialMediaCredentials(currentUser.uid, platform);
+          const creds = await getSocialMediaCredentials(user.uid, platform);
           return {
             platform,
             isConnected: !!creds,
@@ -44,7 +44,7 @@ export default function Library() {
     }
 
     loadPlatformStatuses();
-  }, []);
+  }, [user]);
 
   const content = [
     {
@@ -202,9 +202,9 @@ export default function Library() {
                     </div>
                     <Link
                       href="/settings/social-media"
-                      className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-black bg-primary hover:bg-primary/90"
+                      className="text-sm text-primary hover:text-primary/90"
                     >
-                      Connect Now
+                      Connect Account →
                     </Link>
                   </div>
                 )}
@@ -213,90 +213,51 @@ export default function Library() {
         </div>
 
         {/* Content Grid/List */}
-        {viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredContent.map((item) => (
-              <div key={item.id} className="group relative">
-                <div className="aspect-video rounded-lg bg-gray-800 overflow-hidden">
-                  <img
-                    src={item.thumbnail}
-                    alt={item.title}
-                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                  />
-                </div>
-                <div className="mt-4">
-                  <h3 className="text-sm font-medium text-white line-clamp-2">
-                    {item.title}
-                  </h3>
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <div className="flex items-center space-x-4">
-                      <span className="text-gray-400">
-                        {new Intl.NumberFormat('en-US', {
-                          notation: 'compact',
-                        }).format(item.views)}{' '}
-                        views
-                      </span>
-                      <span className="text-gray-400">
-                        {new Intl.NumberFormat('en-US', {
-                          notation: 'compact',
-                        }).format(item.likes)}{' '}
-                        likes
-                      </span>
-                    </div>
-                    <span className="text-gray-400 capitalize">{item.platform}</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    // Handle video click
-                  }}
-                  className="absolute inset-0 w-full h-full cursor-pointer focus:outline-none"
-                >
-                  <span className="sr-only">View details</span>
-                </button>
-              </div>
-            ))}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="text-gray-400 mt-4">Loading your content...</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-4'}>
             {filteredContent.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center space-x-4 bg-gray-800 p-4 rounded-lg"
+                className={`bg-gray-800 rounded-lg overflow-hidden ${
+                  viewMode === 'list' ? 'flex' : ''
+                }`}
               >
-                <div className="flex-shrink-0 w-48">
-                  <div className="aspect-video rounded-lg overflow-hidden">
-                    <img
-                      src={item.thumbnail}
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+                <div className={`${viewMode === 'list' ? 'w-48 flex-shrink-0' : ''}`}>
+                  <img
+                    src={item.thumbnail}
+                    alt={item.title}
+                    className="w-full h-32 object-cover"
+                  />
                 </div>
-                <div className="flex-grow">
-                  <h3 className="text-sm font-medium text-white mb-2">
-                    {item.title}
-                  </h3>
-                  <div className="flex items-center space-x-4 text-sm">
-                    <span className="text-gray-400">
-                      {new Intl.NumberFormat('en-US', {
-                        notation: 'compact',
-                      }).format(item.views)}{' '}
-                      views
+                <div className="p-4 flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      item.platform === 'youtube' ? 'bg-red-500/20 text-red-400' :
+                      item.platform === 'tiktok' ? 'bg-pink-500/20 text-pink-400' :
+                      'bg-purple-500/20 text-purple-400'
+                    }`}>
+                      {item.platform}
                     </span>
-                    <span className="text-gray-400">
-                      {new Intl.NumberFormat('en-US', {
-                        notation: 'compact',
-                      }).format(item.likes)}{' '}
-                      likes
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      item.status === 'published' ? 'bg-green-500/20 text-green-400' :
+                      'bg-yellow-500/20 text-yellow-400'
+                    }`}>
+                      {item.status}
                     </span>
-                    <span className="text-gray-400 capitalize">{item.platform}</span>
                   </div>
-                </div>
-                <div className="flex-shrink-0">
-                  <Button variant="secondary" size="sm">
-                    View Details
-                  </Button>
+                  <h3 className="text-white font-medium mb-2 line-clamp-2">{item.title}</h3>
+                  <div className="flex items-center justify-between text-sm text-gray-400">
+                    <div className="flex items-center space-x-4">
+                      <span>{item.views.toLocaleString()} views</span>
+                      <span>{item.likes.toLocaleString()} likes</span>
+                    </div>
+                    <span>{new Date(item.date).toLocaleDateString()}</span>
+                  </div>
                 </div>
               </div>
             ))}

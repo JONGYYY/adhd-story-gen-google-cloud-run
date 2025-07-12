@@ -12,7 +12,7 @@ import {
   signInWithPopup,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, Auth } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -96,10 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('Error in auth state change:', error);
           // If session creation fails, sign out
           try {
-            await signOut(auth);
-          } catch (signOutError) {
-            console.error('Error signing out after session creation failure:', signOutError);
-          }
+            if (auth) {
+              await signOut(auth);
+            }
+          } catch {}
           setUser(null);
         }
       }

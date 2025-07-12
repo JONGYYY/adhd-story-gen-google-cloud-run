@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
 import { TikTokAPI } from '@/lib/social-media/tiktok';
-import { auth } from '@/lib/firebase';
+import { verifySessionCookie } from '@/lib/firebase-admin';
 import { setSocialMediaCredentials } from '@/lib/social-media/schema';
 
 export async function GET(request: NextRequest) {
@@ -14,6 +14,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=No authorization code received`);
     }
 
+    // Get current user from session cookie
+    const sessionCookie = request.cookies.get('session')?.value;
+    if (!sessionCookie) {
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Not authenticated`);
+    }
+
+    // Verify session cookie and get user
+    const decodedClaims = await verifySessionCookie(sessionCookie);
+    if (!decodedClaims) {
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Invalid session`);
+    }
+
+    const userId = decodedClaims.uid;
+
     const tiktokApi = new TikTokAPI();
     const tokens = await tiktokApi.getAccessToken(code);
 
@@ -25,22 +39,17 @@ export async function GET(request: NextRequest) {
     const userInfo = await tiktokApi.getUserInfo(tokens.access_token);
 
     // Store credentials in Firebase
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Not authenticated`);
-    }
-
     const credentials = {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token || undefined,
       username: userInfo.username,
       expiresAt: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : Date.now() + 3600000,
       platform: 'tiktok' as const,
-      userId: currentUser.uid,
+      userId: userId,
       profileId: userInfo.open_id
     };
 
-    await setSocialMediaCredentials(currentUser.uid, 'tiktok', credentials);
+    await setSocialMediaCredentials(userId, 'tiktok', credentials);
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?success=TikTok connected successfully`);
   } catch (error) {

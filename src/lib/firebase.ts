@@ -1,7 +1,7 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
 import { getAnalytics, isSupported } from 'firebase/analytics';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -25,9 +25,9 @@ if (missingKeys.length > 0) {
 }
 
 // Initialize Firebase only if we have the required configuration
-let app;
-let auth;
-let db;
+let app: FirebaseApp | undefined;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
 
 try {
   if (getApps().length === 0) {
@@ -54,7 +54,7 @@ try {
   // Initialize Analytics only on client side
   let analytics = null;
   if (typeof window !== 'undefined') {
-    isSupported().then(yes => yes && getAnalytics(app))
+    isSupported().then(yes => yes && getAnalytics(app!))
       .catch(err => console.error('Failed to initialize analytics:', err));
   }
 } catch (error) {
@@ -64,4 +64,5 @@ try {
   db = null;
 }
 
+export type { Auth };
 export { auth, db }; 

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { handleOAuthCallback } from '@/lib/social-media/oauth';
 import { saveSocialMediaCredentials } from '@/lib/social-media/schema';
 import { SocialPlatform } from '@/lib/social-media/types';
-import { auth } from '@/lib/firebase';
+import { verifySessionCookie } from '@/lib/firebase-admin';
 
 export async function GET(
   request: NextRequest,
@@ -28,20 +28,31 @@ export async function GET(
       });
     }
 
-    // Get current user
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
+    // Get current user from session cookie
+    const sessionCookie = request.cookies.get('session')?.value;
+    if (!sessionCookie) {
       return new Response(JSON.stringify({ error: 'Not authenticated' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
+    // Verify session cookie and get user
+    const decodedClaims = await verifySessionCookie(sessionCookie);
+    if (!decodedClaims) {
+      return new Response(JSON.stringify({ error: 'Invalid session' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const userId = decodedClaims.uid;
+
     // Handle OAuth callback and get credentials
     const credentials = await handleOAuthCallback(platform, code);
 
     // Save credentials to database
-    await saveSocialMediaCredentials(currentUser.uid, credentials);
+    await saveSocialMediaCredentials(userId, credentials);
 
     // Redirect to success page
     return new Response(null, {

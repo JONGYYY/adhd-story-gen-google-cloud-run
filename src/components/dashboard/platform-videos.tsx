@@ -2,7 +2,7 @@ import { SocialPlatform } from '@/lib/social-media/types';
 import { getSocialMediaCredentials } from '@/lib/social-media/schema';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/auth-context';
 
 interface PlatformVideo {
   id: string;
@@ -23,15 +23,15 @@ export function PlatformVideos({ platform }: PlatformVideosProps) {
   const [username, setUsername] = useState('');
   const [videos, setVideos] = useState<PlatformVideo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
     async function loadPlatformData() {
       try {
-        const currentUser = auth.currentUser;
-        if (!currentUser) return;
+        if (!user) return;
 
         // Check if platform is connected
-        const credentials = await getSocialMediaCredentials(currentUser.uid, platform);
+        const credentials = await getSocialMediaCredentials(user.uid, platform);
         setIsConnected(!!credentials);
         if (credentials) {
           setUsername(credentials.username);
@@ -58,7 +58,7 @@ export function PlatformVideos({ platform }: PlatformVideosProps) {
     }
 
     loadPlatformData();
-  }, [platform]);
+  }, [platform, user]);
 
   if (isLoading) {
     return (
