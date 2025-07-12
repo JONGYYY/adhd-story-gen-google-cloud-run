@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       expiresAt: tokens.expiry_date ?? (Date.now() + 3600000),
       platform: 'youtube' as const,
       userId: currentUser.uid,
-      profileId: userInfo.id
+      profileId: userInfo.id ?? undefined
     };
 
     await setSocialMediaCredentials(currentUser.uid, 'youtube', credentials);
