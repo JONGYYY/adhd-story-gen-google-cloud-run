@@ -81,4 +81,22 @@ export class YouTubeAPI {
       throw error;
     }
   }
+
+  async getUserInfo(accessToken: string) {
+    const youtube = google.youtube('v3');
+    this.oauth2Client.setCredentials({ access_token: accessToken });
+    const res = await youtube.channels.list({
+      auth: this.oauth2Client,
+      part: ['snippet'],
+      mine: true,
+    });
+    if (!res.data.items || res.data.items.length === 0) {
+      throw new Error('No YouTube channel found for this user');
+    }
+    const channel = res.data.items[0];
+    return {
+      id: channel.id,
+      username: channel.snippet?.title || '',
+    };
+  }
 } 
