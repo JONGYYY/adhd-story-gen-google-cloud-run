@@ -34,6 +34,7 @@ const AuthContext = createContext<AuthContextType>({
   resetPassword: async () => {},
 });
 
+// WARNING: This provider uses useSearchParams and must only be used in client components/pages.
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);

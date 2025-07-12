@@ -52,6 +52,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          {/* WARNING: AuthProvider uses useSearchParams and must only be used in client components. If SSR errors occur, move AuthProvider to a client-only wrapper. */}
           <AuthProvider>
             <div className="relative min-h-screen flex flex-col">
               <Navigation />

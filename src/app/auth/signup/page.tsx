@@ -4,8 +4,17 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { Suspense } from 'react';
 
-export default function SignUp() {
+export default function SignUpWrapper() {
+  return (
+    <Suspense>
+      <SignUp />
+    </Suspense>
+  );
+}
+
+function SignUp() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signUp, signInWithGoogle } = useAuth();
