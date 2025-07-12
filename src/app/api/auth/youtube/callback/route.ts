@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token || undefined,
       username: userInfo.username,
-      expiresAt: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : Date.now() + 3600000,
+      expiresAt: tokens.expiry_date ?? (Date.now() + 3600000),
       platform: 'youtube' as const,
       userId: currentUser.uid,
       profileId: userInfo.id
