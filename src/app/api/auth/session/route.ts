@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     console.log('ID token received, length:', idToken.length);
     console.log('Creating session cookie...');
     
-    // Create a session cookie using Firebase Admin
+    // Create a session cookie using Firebase Admin directly
     const sessionCookie = await createSessionCookie(idToken, expiresIn);
 
     if (!sessionCookie) {

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { handleOAuthCallback } from '@/lib/social-media/oauth';
-import { saveSocialMediaCredentials } from '@/lib/social-media/schema';
+import { saveSocialMediaCredentialsServer } from '@/lib/social-media/schema';
 import { SocialPlatform } from '@/lib/social-media/types';
 import { verifySessionCookie } from '@/lib/firebase-admin';
 
@@ -51,8 +51,8 @@ export async function GET(
     // Handle OAuth callback and get credentials
     const credentials = await handleOAuthCallback(platform, code);
 
-    // Save credentials to database
-    await saveSocialMediaCredentials(userId, credentials);
+    // Save credentials to database using server-side function
+    await saveSocialMediaCredentialsServer(userId, credentials);
 
     // Redirect to success page
     return new Response(null, {

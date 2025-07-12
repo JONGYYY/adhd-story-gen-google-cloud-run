@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
 import { InstagramAPI } from '@/lib/social-media/instagram';
 import { verifySessionCookie } from '@/lib/firebase-admin';
-import { setSocialMediaCredentials } from '@/lib/social-media/schema';
+import { setSocialMediaCredentialsServer } from '@/lib/social-media/schema';
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Get user info
     const userInfo = await instagramApi.getUserInfo(tokens.access_token);
 
-    // Store credentials in Firebase
+    // Store credentials in Firebase using server-side function
     const credentials = {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token || undefined,
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       profileId: userInfo.id
     };
 
-    await setSocialMediaCredentials(userId, 'instagram', credentials);
+    await setSocialMediaCredentialsServer(userId, 'instagram', credentials);
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?success=Instagram connected successfully`);
   } catch (error) {

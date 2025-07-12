@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
 import { TikTokAPI } from '@/lib/social-media/tiktok';
 import { verifySessionCookie } from '@/lib/firebase-admin';
-import { setSocialMediaCredentials } from '@/lib/social-media/schema';
+import { setSocialMediaCredentialsServer } from '@/lib/social-media/schema';
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Get user info
     const userInfo = await tiktokApi.getUserInfo(tokens.access_token);
 
-    // Store credentials in Firebase
+    // Store credentials in Firebase using server-side function
     const credentials = {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token || undefined,
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       profileId: userInfo.open_id
     };
 
-    await setSocialMediaCredentials(userId, 'tiktok', credentials);
+    await setSocialMediaCredentialsServer(userId, 'tiktok', credentials);
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?success=TikTok connected successfully`);
   } catch (error) {
