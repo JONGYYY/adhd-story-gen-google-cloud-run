@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     const youtubeApi = new YouTubeAPI();
-    const tokens = await youtubeApi.getAccessToken(code);
+    const tokens = await youtubeApi.getTokensFromCode(code);
 
     if (tokens.error || !tokens.access_token) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${tokens.error || 'No access token received'}`);
