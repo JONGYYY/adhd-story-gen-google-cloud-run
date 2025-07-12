@@ -66,7 +66,7 @@ export function categorizeStory(title: string, content: string, subreddit: strin
   const text = `${title} ${content}`.toLowerCase();
   
   // Check for keyword matches
-  for (const [category, keywords] of Object.entries(config.keywords)) {
+  for (const [category, keywords] of Object.entries(config.keywords) as [string, string[]][]) {
     if (keywords.some(keyword => text.includes(keyword))) {
       return category as StoryCategory;
     }
@@ -121,8 +121,8 @@ export async function fetchRedditStories(
       const posts = await reddit.getSubreddit(sub).getTop({time: timeframe, limit});
       
       for (const post of posts) {
-        // Fetch full content
-        const fullPost = await post.fetch();
+        // Fetch full content - use type assertion to bypass circular type reference
+        const fullPost = await (post as any).fetch();
         
         // Calculate engagement prediction
         const engagementPrediction = calculateEngagementPrediction(
