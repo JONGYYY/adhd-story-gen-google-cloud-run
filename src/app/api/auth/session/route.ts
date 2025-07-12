@@ -10,7 +10,10 @@ const isProduction = process.env.NODE_ENV === 'production';
 export async function POST(request: Request) {
   try {
     console.log('Session creation request received');
-    const { idToken } = await request.json();
+    const body = await request.json();
+    console.log('Request body keys:', Object.keys(body));
+    
+    const { idToken } = body;
     
     if (!idToken) {
       console.error('No idToken provided in request');
@@ -20,21 +23,33 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log('ID token received, length:', idToken.length);
     console.log('Creating session cookie...');
+    
     // Create a session cookie using Firebase Admin
     const sessionCookie = await createSessionCookie(idToken, expiresIn);
 
-    console.log('Session cookie created successfully');
+    console.log('Session cookie created successfully, length:', sessionCookie.length);
+    
     // Set cookie options
     const options = {
       name: 'session',
       value: sessionCookie,
       maxAge: expiresIn,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction,
       path: '/',
       sameSite: 'lax' as const,
     };
+
+    console.log('Cookie options:', {
+      name: options.name,
+      maxAge: options.maxAge,
+      httpOnly: options.httpOnly,
+      secure: options.secure,
+      path: options.path,
+      sameSite: options.sameSite
+    });
 
     // Return the session cookie
     const response = new NextResponse(JSON.stringify({ status: 'success' }), {
@@ -51,6 +66,10 @@ export async function POST(request: Request) {
     return response;
   } catch (error: any) {
     console.error('Failed to create session:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    
     // Return a more detailed error message
     const errorMessage = error.message || 'Unknown error occurred';
     const errorCode = error.code || 'UNKNOWN_ERROR';
@@ -60,6 +79,7 @@ export async function POST(request: Request) {
         error: 'Internal server error',
         details: errorMessage,
         code: errorCode,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       }),
       { 
         status: 500,
