@@ -66,7 +66,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 export async function generateTimedSegments(
   text: string,
   audioPath: string,
-  tmpDir: string
+  tmpDir: string,
+  type: 'title' | 'story' = 'story'
 ): Promise<VideoSegment[]> {
   // Split text into words/phrases
   const words = text.split(/\s+/);
@@ -94,7 +95,8 @@ export async function generateTimedSegments(
     segments.push({
       text: phrase,
       startTime: currentTime,
-      endTime: currentTime + duration - gap
+      endTime: currentTime + duration - gap,
+      type
     });
     
     // Move time cursor forward including the gap

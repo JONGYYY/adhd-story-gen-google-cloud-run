@@ -16,7 +16,7 @@ export class YouTubeAPI {
   private oauth2Client: OAuth2Client;
 
   constructor() {
-    this.oauth2Client = new OAuth2Client(
+    this.oauth2Client = new google.auth.OAuth2(
       YOUTUBE_OAUTH_CONFIG.clientId,
       YOUTUBE_OAUTH_CONFIG.clientSecret,
       YOUTUBE_OAUTH_CONFIG.redirectUri
@@ -43,18 +43,18 @@ export class YouTubeAPI {
     privacyStatus?: 'private' | 'unlisted' | 'public';
   }) {
     try {
+      // Set the credentials on the OAuth2 client
       this.oauth2Client.setCredentials({
         access_token: accessToken
       });
 
-      const youtube = google.youtube({
-        version: 'v3',
-        auth: this.oauth2Client
-      });
+      // Create YouTube client with the authenticated OAuth2 client
+      const youtube = google.youtube('v3');
 
       const fileSize = fs.statSync(videoData.filePath).size;
 
       const res = await youtube.videos.insert({
+        auth: this.oauth2Client,
         part: ['snippet', 'status'],
         requestBody: {
           snippet: {

@@ -7,7 +7,7 @@ export type SubredditStory = {
 };
 
 export type VideoBackground = {
-  category: 'minecraft' | 'subway' | 'cooking' | 'workers';
+  category: 'minecraft' | 'subway' | 'cooking' | 'workers' | 'random';
   speedMultiplier: number;
 };
 
@@ -54,8 +54,8 @@ export type VideoGenerationOptions = VideoOptions & {
 
 export type VideoSegment = {
   text: string;
-  start: number;
-  end: number;
+  startTime: number;
+  endTime: number;
   type: 'title' | 'story';
 };
 
