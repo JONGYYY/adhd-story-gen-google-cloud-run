@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// Prevent static generation
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
 export async function GET() {
   try {
     const oauthConfig = {

@@ -44,58 +44,58 @@ export default function Dashboard() {
 
   return (
     <PageContainer>
-      {/* Dashboard Header */}
+        {/* Dashboard Header */}
       <div className="bg-gray-800 border-b border-gray-700 w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-            <Link
-              href="/create"
+              <Link
+                href="/create"
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-black bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-            >
-              Create New Video
-            </Link>
+              >
+                Create New Video
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Overview */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat) => (
+            {stats.map((stat) => (
             <div key={stat.name} className="bg-gray-800 rounded-lg p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-gray-400">{stat.name}</h3>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                  stat.trend === 'up' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                }`}>
-                  {stat.change}
-                  <svg
-                    className={`ml-1 h-3 w-3 ${stat.trend === 'up' ? 'text-green-400' : 'text-red-400'}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d={stat.trend === 'up' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
-                    />
-                  </svg>
-                </span>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-gray-400">{stat.name}</h3>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    stat.trend === 'up' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
+                    {stat.change}
+                    <svg
+                      className={`ml-1 h-3 w-3 ${stat.trend === 'up' ? 'text-green-400' : 'text-red-400'}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d={stat.trend === 'up' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
+                      />
+                    </svg>
+                  </span>
+                </div>
+                <p className="mt-2 text-3xl font-semibold text-white">{stat.value}</p>
               </div>
-              <p className="mt-2 text-3xl font-semibold text-white">{stat.value}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
         {/* Platform Videos */}
         <div className="space-y-8">
           {platforms.map((platform) => (
             <PlatformVideos key={platform} platform={platform} />
-          ))}
-        </div>
+                ))}
+            </div>
 
         {/* Trending Stories */}
         <div className="bg-gray-800 rounded-lg p-6 mt-8">
@@ -106,7 +106,7 @@ export default function Dashboard() {
               className="text-sm text-primary hover:text-primary/90"
             >
               View All →
-            </Link>
+              </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -119,9 +119,9 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-400">{story.source}</span>
                   <span className="text-green-400">{story.engagement} engagement</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       </div>

@@ -3,6 +3,10 @@ import { verifySessionCookie } from '@/lib/firebase-admin';
 import { getSocialMediaCredentialsServer } from '@/lib/social-media/schema';
 import { SocialPlatform } from '@/lib/social-media/types';
 
+// Prevent static generation
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
 export async function GET(request: NextRequest) {
   try {
     // Get current user from session cookie

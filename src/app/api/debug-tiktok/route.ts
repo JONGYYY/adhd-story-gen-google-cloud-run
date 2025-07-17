@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// Prevent static generation
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
 export async function GET() {
   try {
     const clientKey = process.env.TIKTOK_CLIENT_KEY;
@@ -13,21 +17,6 @@ export async function GET() {
       `scope=${encodeURIComponent('user.info.basic,user.info.profile')}&` +
       `response_type=code`;
 
-    // Test a direct API call to TikTok to see if the client key is valid
-    const testResponse = await fetch('https://open.tiktokapis.com/v2/user/info/', {
-      method: 'GET',
-      headers: {
-        'Authorization': 'Bearer test_token',
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Check if the OAuth URL is accessible
-    const oauthTestResponse = await fetch(oauthUrl, {
-      method: 'HEAD',
-      redirect: 'manual'
-    });
-
     return NextResponse.json({
       success: true,
       debug: {
@@ -35,11 +24,7 @@ export async function GET() {
         clientSecret: clientSecret ? 'SET' : 'NOT_SET',
         redirectUri,
         oauthUrl,
-        appUrl: process.env.NEXT_PUBLIC_APP_URL,
-        testApiResponse: testResponse.status,
-        testApiStatus: testResponse.statusText,
-        oauthUrlAccessible: oauthTestResponse.status,
-        oauthUrlStatus: oauthTestResponse.statusText,
+        appUrl: process.env.NEXT_PUBLIC_APP_URL
       },
       recommendations: [
         '1. Verify client_key is correct in TikTok Developer Console',
