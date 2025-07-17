@@ -8,80 +8,128 @@ const TIKTOK_OAUTH_CONFIG = {
 };
 
 export class TikTokAPI {
-  constructor() {}
+  constructor() {
+    // Validate required environment variables
+    if (!process.env.TIKTOK_CLIENT_KEY) {
+      throw new Error('TIKTOK_CLIENT_KEY is not set');
+    }
+    if (!process.env.TIKTOK_CLIENT_SECRET) {
+      throw new Error('TIKTOK_CLIENT_SECRET is not set');
+    }
+    if (!process.env.NEXT_PUBLIC_APP_URL) {
+      throw new Error('NEXT_PUBLIC_APP_URL is not set');
+    }
+  }
 
   getAuthUrl(): string {
+    console.log('Generating TikTok OAuth URL...');
     const csrfState = generateRandomString(32);
+    
+    // Store state in memory or database for validation
+    // TODO: Implement state storage/validation
+    
     const params = new URLSearchParams({
       client_key: TIKTOK_OAUTH_CONFIG.clientKey,
       redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
       scope: TIKTOK_OAUTH_CONFIG.scopes.join(','),
       response_type: 'code',
-      state: csrfState,
-      app_id: process.env.TIKTOK_CLIENT_KEY!, // Required for sandbox mode
-      app_source_domain: new URL(process.env.NEXT_PUBLIC_APP_URL!).hostname // Required for sandbox mode
+      state: csrfState
     });
 
-    return `https://www.tiktok.com/auth/authorize?${params.toString()}`;
+    // Add sandbox mode parameters
+    params.append('app_id', process.env.TIKTOK_CLIENT_KEY!);
+    params.append('app_source_domain', new URL(process.env.NEXT_PUBLIC_APP_URL!).hostname);
+
+    const url = `https://www.tiktok.com/auth/authorize?${params.toString()}`;
+    console.log('Generated OAuth URL:', url);
+    return url;
   }
 
   async getAccessToken(code: string) {
+    console.log('Getting access token from code...');
     try {
-      const response = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      const tokenUrl = 'https://open.tiktokapis.com/v2/oauth/token/';
+      console.log('Token endpoint:', tokenUrl);
+
+      const params = new URLSearchParams({
+        client_key: TIKTOK_OAUTH_CONFIG.clientKey,
+        client_secret: TIKTOK_OAUTH_CONFIG.clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
+      });
+
+      console.log('Token request params:', {
+        client_key: `${TIKTOK_OAUTH_CONFIG.clientKey.substring(0, 8)}...`,
+        client_secret: 'HIDDEN',
+        code: `${code.substring(0, 8)}...`,
+        redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri
+      });
+
+      const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cache-Control': 'no-cache',
         },
-        body: new URLSearchParams({
-          client_key: TIKTOK_OAUTH_CONFIG.clientKey,
-          client_secret: TIKTOK_OAUTH_CONFIG.clientSecret,
-          code,
-          grant_type: 'authorization_code',
-          redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
-        }).toString(),
+        body: params.toString(),
       });
 
+      const data = await response.json();
+      console.log('Token response status:', response.status);
+      
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`TikTok OAuth error: ${error.message || 'Failed to get access token'}`);
+        console.error('Token error response:', data);
+        throw new Error(`TikTok OAuth error: ${data.error?.message || data.message || 'Failed to get access token'}`);
       }
 
-      return response.json();
+      if (!data.access_token) {
+        console.error('No access token in response:', data);
+        throw new Error('No access token received from TikTok');
+      }
+
+      console.log('Successfully obtained access token');
+      return data;
     } catch (error) {
-      console.error('TikTok OAuth error:', error);
+      console.error('Error getting access token:', error);
       throw error;
     }
   }
 
   async getUserInfo(accessToken: string) {
+    console.log('Getting user info...');
     try {
-      const response = await fetch('https://open.tiktokapis.com/v2/user/info/', {
+      const userUrl = 'https://open.tiktokapis.com/v2/user/info/';
+      console.log('User info endpoint:', userUrl);
+
+      const response = await fetch(userUrl, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
       });
 
+      const data = await response.json();
+      console.log('User info response status:', response.status);
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`TikTok API error: ${error.message || 'Failed to get user info'}`);
+        console.error('User info error response:', data);
+        throw new Error(`TikTok API error: ${data.error?.message || data.message || 'Failed to get user info'}`);
       }
 
-      const userData = await response.json();
-      
-      if (userData.error) {
-        throw new Error(`TikTok API error: ${userData.error.message || 'Failed to get user info'}`);
+      if (!data.data?.user) {
+        console.error('Invalid user info response:', data);
+        throw new Error('Invalid user info response from TikTok');
       }
 
-      // Return the actual user data structure from TikTok API
+      console.log('Successfully obtained user info');
       return {
-        open_id: userData.data.user.open_id,
-        username: userData.data.user.display_name,
-        display_name: userData.data.user.display_name,
-        avatar_url: userData.data.user.avatar_url
+        open_id: data.data.user.open_id,
+        username: data.data.user.display_name,
+        display_name: data.data.user.display_name,
+        avatar_url: data.data.user.avatar_url
       };
     } catch (error) {
-      console.error('TikTok API error:', error);
+      console.error('Error getting user info:', error);
       throw error;
     }
   }
