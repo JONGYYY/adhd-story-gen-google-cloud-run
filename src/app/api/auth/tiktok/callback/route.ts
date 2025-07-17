@@ -126,22 +126,33 @@ export async function GET(request: NextRequest) {
     };
 
     console.log('Saving credentials to Firebase...');
+    let firestoreError = null;
     try {
       await setSocialMediaCredentialsServer(userId, 'tiktok', credentials);
+      console.log('Credentials saved successfully');
     } catch (error) {
       console.error('Error saving credentials:', error);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          'Failed to save TikTok credentials'
-        )}`
-      );
+      firestoreError = error;
+      
+      // Check if it's a Firestore API disabled error
+      const isFirestoreDisabled = error instanceof Error && 
+        (error.message.includes('SERVICE_DISABLED') || 
+         error.message.includes('Firestore API has not been used'));
+      
+      if (isFirestoreDisabled) {
+        console.error('Firestore API is disabled. Please enable it at https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=redditstories-531a8');
+      }
     }
 
-    console.log('TikTok OAuth callback completed successfully');
+    // Even if Firestore save fails, we've successfully authenticated with TikTok
+    // Return success but with a warning about the Firestore error
+    const successMessage = firestoreError 
+      ? 'TikTok connected successfully, but there was an error saving the credentials. Please try reconnecting later.'
+      : 'TikTok connected successfully';
+
+    console.log('TikTok OAuth callback completed');
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?success=${encodeURIComponent(
-        'TikTok connected successfully'
-      )}`
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?${firestoreError ? 'warning' : 'success'}=${encodeURIComponent(successMessage)}`
     );
   } catch (error) {
     console.error('Unhandled error in TikTok OAuth callback:', error);
