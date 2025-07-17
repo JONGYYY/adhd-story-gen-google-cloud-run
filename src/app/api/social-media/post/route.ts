@@ -3,9 +3,8 @@ import { verifySessionCookie } from '@/lib/firebase-admin';
 import { postVideo } from '@/lib/social-media/post';
 import { PostVideoParams } from '@/lib/social-media/types';
 
-// Prevent static generation
+// Prevent static generation but use Node.js runtime for Firebase Admin
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   try {

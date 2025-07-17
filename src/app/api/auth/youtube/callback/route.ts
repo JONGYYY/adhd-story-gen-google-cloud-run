@@ -1,8 +1,10 @@
-export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from 'next/server';
 import { YouTubeAPI } from '@/lib/social-media/youtube';
 import { verifySessionCookie } from '@/lib/firebase-admin';
 import { setSocialMediaCredentialsServer } from '@/lib/social-media/schema';
+
+// Prevent static generation but use Node.js runtime for Firebase Admin
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {

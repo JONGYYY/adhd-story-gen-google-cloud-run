@@ -1,5 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createSessionCookie } from '@/lib/firebase-admin';
+
+// Prevent static generation but use Node.js runtime for Firebase Admin
+export const dynamic = 'force-dynamic';
 
 // Set session expiration to 5 days
 const expiresIn = 60 * 60 * 24 * 5 * 1000;
@@ -7,7 +10,7 @@ const expiresIn = 60 * 60 * 24 * 5 * 1000;
 // Helper to determine if we're in production
 const isProduction = process.env.NODE_ENV === 'production';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     console.log('Session creation request received');
     

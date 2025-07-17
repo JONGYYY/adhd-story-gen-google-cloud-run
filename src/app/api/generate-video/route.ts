@@ -5,9 +5,8 @@ import { VideoOptions, SubredditStory, VideoGenerationOptions } from '@/lib/vide
 import { generateStory } from '@/lib/story-generator/openai';
 import { createVideoStatus, setVideoReady, setVideoFailed } from '@/lib/video-generator/status';
 
-// Prevent static generation
+// Prevent static generation but use Node.js runtime for video generation
 export const dynamic = 'force-dynamic';
-export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   const videoId = uuidv4();
