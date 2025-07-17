@@ -51,7 +51,7 @@ export class TikTokAPI {
     const params = new URLSearchParams({
       client_key: TIKTOK_OAUTH_CONFIG.clientKey,
       redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
-      scope: 'user.info.basic,user.info.profile',
+      scope: 'user.info.basic,user.info.profile,video.list,video.upload,video.publish',
       response_type: 'code',
       state,
       app_id: TIKTOK_OAUTH_CONFIG.clientKey,
@@ -184,7 +184,23 @@ export class TikTokAPI {
     video_file: Buffer;
     privacy_level?: 'PUBLIC' | 'SELF_ONLY' | 'MUTUAL_FOLLOW';
   }) {
+    console.log('Uploading video to TikTok...');
+    
+    // In test mode, return mock upload response
+    if (TEST_MODE) {
+      console.log('TikTok TEST MODE: Returning mock video upload response');
+      return {
+        video_id: 'test_video_id_' + Date.now(),
+        status: 'success',
+        message: 'Video uploaded successfully (test mode)',
+        share_url: 'https://tiktok.com/@testuser/video/test123',
+        privacy_level: videoData.privacy_level || 'SELF_ONLY'
+      };
+    }
+    
     try {
+      console.log('Initializing video upload...');
+      
       // 1. Initialize upload
       const initResponse = await fetch('https://open.tiktokapis.com/v2/video/init/', {
         method: 'POST',
@@ -200,13 +216,19 @@ export class TikTokAPI {
         }),
       });
 
+      const initData = await initResponse.json();
+      console.log('Init response status:', initResponse.status);
+      
       if (!initResponse.ok) {
-        throw new Error('Failed to initialize video upload');
+        console.error('Init error response:', initData);
+        throw new Error(`Failed to initialize video upload: ${initData.error?.message || initData.message || 'Unknown error'}`);
       }
 
-      const { upload_url, video_id } = await initResponse.json();
+      const { upload_url, video_id } = initData;
+      console.log('Upload URL received, video ID:', video_id);
 
       // 2. Upload video
+      console.log('Uploading video file...');
       const uploadResponse = await fetch(upload_url, {
         method: 'POST',
         headers: {
@@ -215,11 +237,16 @@ export class TikTokAPI {
         body: videoData.video_file,
       });
 
+      console.log('Upload response status:', uploadResponse.status);
+      
       if (!uploadResponse.ok) {
-        throw new Error('Failed to upload video');
+        const uploadError = await uploadResponse.text();
+        console.error('Upload error response:', uploadError);
+        throw new Error(`Failed to upload video: ${uploadError}`);
       }
 
       // 3. Publish video
+      console.log('Publishing video...');
       const publishResponse = await fetch('https://open.tiktokapis.com/v2/video/publish/', {
         method: 'POST',
         headers: {
@@ -231,11 +258,20 @@ export class TikTokAPI {
         }),
       });
 
+      const publishData = await publishResponse.json();
+      console.log('Publish response status:', publishResponse.status);
+      
       if (!publishResponse.ok) {
-        throw new Error('Failed to publish video');
+        console.error('Publish error response:', publishData);
+        throw new Error(`Failed to publish video: ${publishData.error?.message || publishData.message || 'Unknown error'}`);
       }
 
-      return publishResponse.json();
+      console.log('Video uploaded and published successfully');
+      return {
+        ...publishData,
+        video_id,
+        status: 'success'
+      };
     } catch (error) {
       console.error('TikTok video upload error:', error);
       throw error;
