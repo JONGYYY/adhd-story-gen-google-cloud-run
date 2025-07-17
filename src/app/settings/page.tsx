@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import Link from 'next/link';
 
 export default function SettingsPage() {
   return (
@@ -122,12 +123,14 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {['YouTube', 'TikTok', 'Twitter'].map((platform) => (
+                  {['YouTube', 'TikTok'].map((platform) => (
                     <div key={platform} className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="font-medium">{platform}</div>
                       </div>
-                      <Button variant="outline" size="sm">Connect</Button>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href="/settings/social-media">Connect</Link>
+                      </Button>
                     </div>
                   ))}
                 </div>

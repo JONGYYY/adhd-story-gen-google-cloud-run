@@ -6,37 +6,58 @@ import { setSocialMediaCredentialsServer } from '@/lib/social-media/schema';
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('TikTok OAuth callback received');
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
+    const error = searchParams.get('error');
+    
+    console.log('TikTok OAuth callback params:', { code: !!code, state: !!state, error });
+    
+    if (error) {
+      console.error('TikTok OAuth error:', error);
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=OAuth error: ${error}`);
+    }
     
     if (!code) {
+      console.error('No authorization code received');
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=No authorization code received`);
     }
 
     // Get current user from session cookie
     const sessionCookie = request.cookies.get('session')?.value;
     if (!sessionCookie) {
+      console.error('No session cookie found');
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Not authenticated`);
     }
 
     // Verify session cookie and get user
+    console.log('Verifying session cookie...');
     const decodedClaims = await verifySessionCookie(sessionCookie);
     if (!decodedClaims) {
+      console.error('Invalid session cookie');
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Invalid session`);
     }
 
     const userId = decodedClaims.uid;
+    console.log('User authenticated:', userId);
 
+    console.log('Initializing TikTok API...');
     const tiktokApi = new TikTokAPI();
+    
+    console.log('Getting tokens from code...');
     const tokens = await tiktokApi.getAccessToken(code);
 
     if (tokens.error || !tokens.access_token) {
+      console.error('TikTok token error:', tokens.error || 'No access token received');
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${tokens.error || 'No access token received'}`);
     }
 
+    console.log('Getting user info...');
     // Get user info
     const userInfo = await tiktokApi.getUserInfo(tokens.access_token);
+    
+    console.log('TikTok user info:', userInfo);
 
     // Store credentials in Firebase using server-side function
     const credentials = {
@@ -49,11 +70,14 @@ export async function GET(request: NextRequest) {
       profileId: userInfo.open_id
     };
 
+    console.log('Saving credentials to Firebase...');
     await setSocialMediaCredentialsServer(userId, 'tiktok', credentials);
 
+    console.log('TikTok OAuth callback completed successfully');
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?success=TikTok connected successfully`);
   } catch (error) {
     console.error('Error handling TikTok OAuth callback:', error);
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Failed to connect TikTok`);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Failed to connect TikTok: ${errorMessage}`);
   }
 } 

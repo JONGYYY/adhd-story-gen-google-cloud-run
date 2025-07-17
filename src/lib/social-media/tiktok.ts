@@ -4,23 +4,21 @@ const TIKTOK_OAUTH_CONFIG = {
   clientKey: process.env.TIKTOK_CLIENT_KEY!,
   clientSecret: process.env.TIKTOK_CLIENT_SECRET!,
   redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback`,
-  scopes: ['video.upload', 'video.list', 'user.info.basic']
+  scopes: ['user.info.basic', 'user.info.profile']
 };
 
 export class TikTokAPI {
   constructor() {}
 
   getAuthUrl(): string {
-    const state = generateRandomString(32); // Add this to your utils
     const params = new URLSearchParams({
       client_key: TIKTOK_OAUTH_CONFIG.clientKey,
       redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
       scope: TIKTOK_OAUTH_CONFIG.scopes.join(','),
-      response_type: 'code',
-      state
+      response_type: 'code'
     });
 
-    return `https://www.tiktok.com/v2/auth/authorize?${params.toString()}`;
+    return `https://www.tiktok.com/auth/authorize?${params.toString()}`;
   }
 
   async getAccessToken(code: string) {
@@ -65,7 +63,19 @@ export class TikTokAPI {
         throw new Error(`TikTok API error: ${error.message || 'Failed to get user info'}`);
       }
 
-      return response.json();
+      const userData = await response.json();
+      
+      if (userData.error) {
+        throw new Error(`TikTok API error: ${userData.error.message || 'Failed to get user info'}`);
+      }
+
+      // Return the actual user data structure from TikTok API
+      return {
+        open_id: userData.data.user.open_id,
+        username: userData.data.user.display_name,
+        display_name: userData.data.user.display_name,
+        avatar_url: userData.data.user.avatar_url
+      };
     } catch (error) {
       console.error('TikTok API error:', error);
       throw error;

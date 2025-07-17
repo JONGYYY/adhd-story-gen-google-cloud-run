@@ -1,4 +1,5 @@
 import { SocialPlatform, SocialMediaCredentials } from './types';
+import { generateRandomString } from '@/lib/utils';
 
 const YOUTUBE_OAUTH_CONFIG = {
   clientId: process.env.YOUTUBE_CLIENT_ID!,
@@ -14,7 +15,7 @@ const TIKTOK_OAUTH_CONFIG = {
   clientKey: process.env.TIKTOK_CLIENT_KEY!,
   clientSecret: process.env.TIKTOK_CLIENT_SECRET!,
   redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback`,
-  scope: ['video.upload', 'video.list', 'user.info.basic'].join(',')
+  scope: ['user.info.basic', 'user.info.profile'].join(',')
 };
 
 export function getOAuthUrl(platform: SocialPlatform): string {
@@ -29,8 +30,8 @@ export function getOAuthUrl(platform: SocialPlatform): string {
         `prompt=consent`;
     
     case 'tiktok':
-      return `https://www.tiktok.com/auth/authorize/` +
-        `?client_key=${TIKTOK_OAUTH_CONFIG.clientKey}&` +
+      return `https://www.tiktok.com/auth/authorize?` +
+        `client_key=${TIKTOK_OAUTH_CONFIG.clientKey}&` +
         `redirect_uri=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.redirectUri)}&` +
         `scope=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.scope)}&` +
         `response_type=code`;
@@ -91,33 +92,42 @@ async function handleYouTubeCallback(code: string): Promise<SocialMediaCredentia
 
 async function handleTikTokCallback(code: string): Promise<SocialMediaCredentials> {
   // Exchange code for tokens
-  const tokenResponse = await fetch('https://open-api.tiktok.com/oauth/access_token/', {
+  const tokenResponse = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       code,
       client_key: TIKTOK_OAUTH_CONFIG.clientKey,
       client_secret: TIKTOK_OAUTH_CONFIG.clientSecret,
-      grant_type: 'authorization_code'
+      grant_type: 'authorization_code',
+      redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
     })
   });
 
   const tokens = await tokenResponse.json();
 
+  if (tokens.error || !tokens.access_token) {
+    throw new Error(`TikTok OAuth error: ${tokens.error || 'No access token received'}`);
+  }
+
   // Get user info
-  const userResponse = await fetch('https://open-api.tiktok.com/user/info/', {
+  const userResponse = await fetch('https://open.tiktokapis.com/v2/user/info/', {
     headers: { 'Authorization': `Bearer ${tokens.access_token}` }
   });
   
   const userData = await userResponse.json();
 
+  if (userData.error) {
+    throw new Error(`TikTok API error: ${userData.error.message || 'Failed to get user info'}`);
+  }
+
   return {
     platform: 'tiktok',
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
-    expiresAt: Date.now() + (tokens.expires_in * 1000),
-    userId: userData.user.id,
-    username: userData.user.username,
-    profileId: userData.user.open_id
+    expiresAt: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : Date.now() + 3600000,
+    userId: userData.data.user.open_id,
+    username: userData.data.user.display_name,
+    profileId: userData.data.user.open_id
   };
-} 
+}
