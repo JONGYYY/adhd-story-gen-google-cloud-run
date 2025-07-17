@@ -1,5 +1,5 @@
 import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getAdminFirestore } from '@/lib/firebase-admin';
 import { SocialMediaCredentials, SocialPlatform } from './types';
 
 const COLLECTION_NAME = 'socialMediaCredentials';
@@ -60,7 +60,7 @@ export async function setSocialMediaCredentialsServer(
   platform: SocialPlatform,
   credentials: Partial<SocialMediaCredentials>
 ) {
-  const db = getAdminFirestore();
+  const db = await getAdminFirestore();
   const docRef = db.collection(COLLECTION_NAME).doc(`${userId}_${platform}`);
   await docRef.set({
     ...credentials,
@@ -73,7 +73,7 @@ export async function saveSocialMediaCredentialsServer(
   userId: string,
   credentials: SocialMediaCredentials
 ) {
-  const db = getAdminFirestore();
+  const db = await getAdminFirestore();
   const docRef = db.collection(COLLECTION_NAME).doc(`${userId}_${credentials.platform}`);
   await docRef.set({
     ...credentials,
@@ -85,7 +85,7 @@ export async function getSocialMediaCredentialsServer(
   userId: string,
   platform: SocialPlatform
 ): Promise<SocialMediaCredentials | null> {
-  const db = getAdminFirestore();
+  const db = await getAdminFirestore();
   const docRef = db.collection(COLLECTION_NAME).doc(`${userId}_${platform}`);
   const docSnap = await docRef.get();
   
@@ -99,7 +99,7 @@ export async function deleteSocialMediaCredentialsServer(
   userId: string,
   platform: SocialPlatform
 ) {
-  const db = getAdminFirestore();
+  const db = await getAdminFirestore();
   const docRef = db.collection(COLLECTION_NAME).doc(`${userId}_${platform}`);
   await docRef.delete();
 }

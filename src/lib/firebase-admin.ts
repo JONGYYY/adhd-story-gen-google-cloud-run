@@ -1,13 +1,16 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 import type { Auth } from 'firebase-admin/auth';
 import type { App } from 'firebase-admin/app';
+import type { Firestore } from 'firebase-admin/firestore';
 
 let adminApp: App | undefined;
 let adminAuth: Auth | undefined;
+let adminFirestore: Firestore | undefined;
 
 export async function initFirebaseAdmin() {
-  if (!adminAuth) {
+  if (!adminAuth || !adminFirestore) {
     try {
       console.log('Initializing Firebase Admin...');
       const apps = getApps();
@@ -49,18 +52,21 @@ export async function initFirebaseAdmin() {
 
       adminAuth = getAuth(adminApp);
       console.log('Firebase Admin auth initialized');
+
+      adminFirestore = getFirestore(adminApp);
+      console.log('Firebase Admin Firestore initialized');
     } catch (error) {
       console.error('Failed to initialize Firebase Admin:', error);
       throw error;
     }
   }
 
-  return adminAuth;
+  return { auth: adminAuth, firestore: adminFirestore };
 }
 
 export async function verifySessionCookie(sessionCookie: string, checkRevoked = true) {
   try {
-    const auth = await initFirebaseAdmin();
+    const { auth } = await initFirebaseAdmin();
     const decodedClaims = await auth.verifySessionCookie(sessionCookie, checkRevoked);
     return decodedClaims;
   } catch (error) {
@@ -71,11 +77,16 @@ export async function verifySessionCookie(sessionCookie: string, checkRevoked = 
 
 export async function createSessionCookie(idToken: string, expiresIn: number) {
   try {
-    const auth = await initFirebaseAdmin();
+    const { auth } = await initFirebaseAdmin();
     const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn });
     return sessionCookie;
   } catch (error) {
     console.error('Failed to create session cookie:', error);
     throw error;
   }
+}
+
+export async function getAdminFirestore() {
+  const { firestore } = await initFirebaseAdmin();
+  return firestore;
 } 
