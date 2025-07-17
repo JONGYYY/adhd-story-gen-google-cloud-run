@@ -37,6 +37,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=No authorization code received`);
     }
 
+    if (!state) {
+      console.error('No state parameter received');
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Invalid OAuth state`);
+    }
+
     // Get current user from session cookie
     const sessionCookie = request.cookies.get('session')?.value;
     if (!sessionCookie) {

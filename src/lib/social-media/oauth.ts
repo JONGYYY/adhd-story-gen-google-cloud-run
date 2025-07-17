@@ -30,7 +30,7 @@ export function getOAuthUrl(platform: SocialPlatform): string {
         `prompt=consent`;
     
     case 'tiktok':
-      return `https://www.tiktok.com/v2/auth/authorize?` +
+      return `https://www.tiktok.com/auth/authorize/v2/?` +
         `client_key=${TIKTOK_OAUTH_CONFIG.clientKey}&` +
         `redirect_uri=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.redirectUri)}&` +
         `scope=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.scope)}&` +
