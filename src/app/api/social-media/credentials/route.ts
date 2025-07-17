@@ -43,6 +43,18 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to get social media credentials:', error);
-    return NextResponse.json({ error: 'Failed to get credentials' }, { status: 500 });
+    
+    // Handle database service errors more gracefully
+    if (error instanceof Error && error.message.includes('Database service is not available')) {
+      return NextResponse.json({ 
+        error: 'Database service is temporarily unavailable',
+        connected: false 
+      }, { status: 503 });
+    }
+    
+    return NextResponse.json({ 
+      error: 'Failed to get credentials',
+      connected: false 
+    }, { status: 500 });
   }
 } 

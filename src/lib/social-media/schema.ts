@@ -85,14 +85,31 @@ export async function getSocialMediaCredentialsServer(
   userId: string,
   platform: SocialPlatform
 ): Promise<SocialMediaCredentials | null> {
-  const db = await getAdminFirestore();
-  const docRef = db.collection(COLLECTION_NAME).doc(`${userId}_${platform}`);
-  const docSnap = await docRef.get();
-  
-  if (docSnap.exists) {
-    return docSnap.data() as SocialMediaCredentials;
+  try {
+    const db = await getAdminFirestore();
+    const docRef = db.collection(COLLECTION_NAME).doc(`${userId}_${platform}`);
+    const docSnap = await docRef.get();
+    
+    if (docSnap.exists) {
+      return docSnap.data() as SocialMediaCredentials;
+    }
+    return null;
+  } catch (error: any) {
+    // Handle NOT_FOUND errors gracefully - this is expected when no credentials exist
+    if (error.code === 5 || error.message?.includes('NOT_FOUND')) {
+      console.log(`No social media credentials found for user ${userId} on platform ${platform}`);
+      return null;
+    }
+    
+    // Handle Firestore API disabled errors
+    if (error.code === 7 || error.message?.includes('SERVICE_DISABLED')) {
+      console.error('Firestore API is disabled. Please enable it in Google Cloud Console.');
+      throw new Error('Database service is not available. Please contact support.');
+    }
+    
+    // Re-throw other errors
+    throw error;
   }
-  return null;
 }
 
 export async function deleteSocialMediaCredentialsServer(
