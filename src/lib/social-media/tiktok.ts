@@ -11,14 +11,16 @@ export class TikTokAPI {
   constructor() {}
 
   getAuthUrl(): string {
+    const state = generateRandomString(32);
     const params = new URLSearchParams({
       client_key: TIKTOK_OAUTH_CONFIG.clientKey,
       redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
       scope: TIKTOK_OAUTH_CONFIG.scopes.join(','),
-      response_type: 'code'
+      response_type: 'code',
+      state
     });
 
-    return `https://www.tiktok.com/auth/authorize?${params.toString()}`;
+    return `https://www.tiktok.com/v2/auth/authorize?${params.toString()}`;
   }
 
   async getAccessToken(code: string) {

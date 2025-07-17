@@ -1,4 +1,6 @@
+// Prevent static generation but use Node.js runtime for Firebase Admin
 export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from 'next/server';
 import { TikTokAPI } from '@/lib/social-media/tiktok';
 import { verifySessionCookie } from '@/lib/firebase-admin';
@@ -11,12 +13,23 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code');
     const state = searchParams.get('state');
     const error = searchParams.get('error');
+    const errorDescription = searchParams.get('error_description');
     
-    console.log('TikTok OAuth callback params:', { code: !!code, state: !!state, error });
+    console.log('TikTok OAuth callback params:', { 
+      code: !!code, 
+      state: !!state, 
+      error,
+      errorDescription,
+      rawUrl: request.url
+    });
     
     if (error) {
-      console.error('TikTok OAuth error:', error);
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=OAuth error: ${error}`);
+      console.error('TikTok OAuth error:', { error, errorDescription });
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+          `OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`
+        )}`
+      );
     }
     
     if (!code) {
@@ -49,8 +62,12 @@ export async function GET(request: NextRequest) {
     const tokens = await tiktokApi.getAccessToken(code);
 
     if (tokens.error || !tokens.access_token) {
-      console.error('TikTok token error:', tokens.error || 'No access token received');
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${tokens.error || 'No access token received'}`);
+      console.error('TikTok token error:', tokens);
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+          tokens.error || 'No access token received'
+        )}`
+      );
     }
 
     console.log('Getting user info...');
@@ -78,6 +95,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error handling TikTok OAuth callback:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=Failed to connect TikTok: ${errorMessage}`);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        `Failed to connect TikTok: ${errorMessage}`
+      )}`
+    );
   }
 } 
