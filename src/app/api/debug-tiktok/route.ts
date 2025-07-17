@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { TikTokAPI } from '@/lib/social-media/tiktok';
 
 // Prevent static generation
 export const dynamic = 'force-dynamic';
@@ -10,12 +11,9 @@ export async function GET() {
     const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback`;
     
-    // Test the OAuth URL generation
-    const oauthUrl = `https://www.tiktok.com/auth/authorize?` +
-      `client_key=${clientKey}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `scope=${encodeURIComponent('user.info.basic,user.info.profile')}&` +
-      `response_type=code`;
+    // Test the OAuth URL generation using TikTok API class
+    const tiktokApi = new TikTokAPI();
+    const oauthUrl = tiktokApi.getAuthUrl();
 
     return NextResponse.json({
       success: true,

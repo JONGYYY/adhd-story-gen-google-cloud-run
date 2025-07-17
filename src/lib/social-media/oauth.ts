@@ -30,12 +30,15 @@ export function getOAuthUrl(platform: SocialPlatform): string {
         `prompt=consent`;
     
     case 'tiktok':
-      return `https://www.tiktok.com/auth/authorize/v2/?` +
+      const csrfState = generateRandomString(32);
+      return `https://www.tiktok.com/auth/authorize?` +
         `client_key=${TIKTOK_OAUTH_CONFIG.clientKey}&` +
         `redirect_uri=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.redirectUri)}&` +
         `scope=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.scope)}&` +
         `response_type=code&` +
-        `state=${generateRandomString(32)}`;
+        `state=${csrfState}&` +
+        `app_id=${TIKTOK_OAUTH_CONFIG.clientKey}&` +
+        `app_source_domain=${new URL(process.env.NEXT_PUBLIC_APP_URL!).hostname}`;
     
     default:
       throw new Error(`Unsupported platform: ${platform}`);

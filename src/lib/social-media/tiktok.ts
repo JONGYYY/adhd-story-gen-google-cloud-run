@@ -17,10 +17,12 @@ export class TikTokAPI {
       redirect_uri: TIKTOK_OAUTH_CONFIG.redirectUri,
       scope: TIKTOK_OAUTH_CONFIG.scopes.join(','),
       response_type: 'code',
-      state: csrfState
+      state: csrfState,
+      app_id: process.env.TIKTOK_CLIENT_KEY!, // Required for sandbox mode
+      app_source_domain: new URL(process.env.NEXT_PUBLIC_APP_URL!).hostname // Required for sandbox mode
     });
 
-    return `https://www.tiktok.com/auth/authorize/v2/?${params.toString()}`;
+    return `https://www.tiktok.com/auth/authorize?${params.toString()}`;
   }
 
   async getAccessToken(code: string) {
