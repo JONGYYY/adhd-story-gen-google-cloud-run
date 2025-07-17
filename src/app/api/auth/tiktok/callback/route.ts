@@ -7,6 +7,11 @@ import { verifySessionCookie } from '@/lib/firebase-admin';
 import { setSocialMediaCredentialsServer } from '@/lib/social-media/schema';
 
 export async function GET(request: NextRequest) {
+  console.log('=== TikTok OAuth Callback Started ===');
+  console.log('Request URL:', request.url);
+  console.log('Request method:', request.method);
+  console.log('Request headers:', Object.fromEntries(request.headers.entries()));
+  
   try {
     console.log('TikTok OAuth callback received');
     const searchParams = request.nextUrl.searchParams;
@@ -21,42 +26,48 @@ export async function GET(request: NextRequest) {
     
     if (error) {
       console.error('TikTok OAuth error from callback:', { error, errorDescription });
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          `TikTok OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        `TikTok OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
     
     if (!code) {
       console.error('No authorization code received');
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          'No authorization code received from TikTok'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        'No authorization code received from TikTok'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
 
     if (!state) {
       console.error('No state parameter received');
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          'Invalid OAuth state - possible CSRF attack'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        'Invalid OAuth state - possible CSRF attack'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
+
+    console.log('OAuth parameters validated successfully');
+    console.log('Code received:', code ? `${code.substring(0, 10)}...` : 'NONE');
+    console.log('State received:', state ? `${state.substring(0, 10)}...` : 'NONE');
 
     // TODO: Validate state parameter against stored value
 
     // Get current user from session cookie
     const sessionCookie = request.cookies.get('session')?.value;
+    console.log('Session cookie present:', !!sessionCookie);
+    
     if (!sessionCookie) {
       console.error('No session cookie found');
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          'Not authenticated - please log in'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        'Not authenticated - please log in'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
 
     // Verify session cookie and get user
@@ -64,15 +75,15 @@ export async function GET(request: NextRequest) {
     const decodedClaims = await verifySessionCookie(sessionCookie);
     if (!decodedClaims) {
       console.error('Invalid session cookie');
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          'Invalid session - please log in again'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        'Invalid session - please log in again'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
 
     const userId = decodedClaims.uid;
-    console.log('User authenticated:', userId);
+    console.log('User authenticated successfully:', userId);
 
     console.log('Initializing TikTok API...');
     const tiktokApi = new TikTokAPI();
@@ -81,35 +92,37 @@ export async function GET(request: NextRequest) {
     let tokens;
     try {
       tokens = await tiktokApi.getAccessToken(code);
+      console.log('Tokens received successfully:', !!tokens.access_token);
     } catch (error) {
       console.error('Error getting access token:', error);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          error instanceof Error ? error.message : 'Failed to get access token'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        error instanceof Error ? error.message : 'Failed to get access token'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
 
     if (!tokens.access_token) {
       console.error('No access token received:', tokens);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          'No access token received from TikTok'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        'No access token received from TikTok'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
 
     console.log('Getting user info...');
     let userInfo;
     try {
       userInfo = await tiktokApi.getUserInfo(tokens.access_token);
+      console.log('User info received successfully:', !!userInfo);
     } catch (error) {
       console.error('Error getting user info:', error);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-          error instanceof Error ? error.message : 'Failed to get user info'
-        )}`
-      );
+      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+        error instanceof Error ? error.message : 'Failed to get user info'
+      )}`;
+      console.log('Redirecting to error page:', redirectUrl);
+      return NextResponse.redirect(redirectUrl);
     }
     
     console.log('TikTok user info:', userInfo);
@@ -150,16 +163,23 @@ export async function GET(request: NextRequest) {
       ? 'TikTok connected successfully, but there was an error saving the credentials. Please try reconnecting later.'
       : 'TikTok connected successfully';
 
-    console.log('TikTok OAuth callback completed');
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?${firestoreError ? 'warning' : 'success'}=${encodeURIComponent(successMessage)}`
-    );
+    console.log('TikTok OAuth callback completed successfully');
+    const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?${firestoreError ? 'warning' : 'success'}=${encodeURIComponent(successMessage)}`;
+    console.log('Redirecting to success page:', redirectUrl);
+    console.log('=== TikTok OAuth Callback Completed ===');
+    
+    return NextResponse.redirect(redirectUrl);
   } catch (error) {
-    console.error('Unhandled error in TikTok OAuth callback:', error);
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
-        `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
-      )}`
-    );
+    console.error('=== UNHANDLED ERROR IN TIKTOK CALLBACK ===');
+    console.error('Error details:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
+    const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    )}`;
+    console.log('Redirecting to error page:', redirectUrl);
+    console.log('=== TikTok OAuth Callback Failed ===');
+    
+    return NextResponse.redirect(redirectUrl);
   }
 } 
