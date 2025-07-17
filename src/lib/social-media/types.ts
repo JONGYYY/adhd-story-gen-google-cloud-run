@@ -1,4 +1,4 @@
-export type SocialPlatform = 'youtube' | 'tiktok' | 'instagram';
+export type SocialPlatform = 'youtube' | 'tiktok';
 
 export interface SocialMediaCredentials {
   platform: SocialPlatform;

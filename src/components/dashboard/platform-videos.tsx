@@ -1,5 +1,4 @@
 import { SocialPlatform } from '@/lib/social-media/types';
-import { getSocialMediaCredentials } from '@/lib/social-media/schema';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
@@ -30,11 +29,19 @@ export function PlatformVideos({ platform }: PlatformVideosProps) {
       try {
         if (!user) return;
 
-        // Check if platform is connected
-        const credentials = await getSocialMediaCredentials(user.uid, platform);
-        setIsConnected(!!credentials);
-        if (credentials) {
-          setUsername(credentials.username);
+        // Check if platform is connected using API route
+        const response = await fetch(`/api/social-media/credentials?platform=${platform}`);
+        
+        if (!response.ok) {
+          console.error('Failed to fetch credentials');
+          return;
+        }
+
+        const data = await response.json();
+        setIsConnected(data.connected);
+        
+        if (data.connected) {
+          setUsername(data.username);
           // Here you would fetch videos from the platform's API
           // For now using placeholder data
           setVideos([

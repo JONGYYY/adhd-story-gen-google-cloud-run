@@ -10,7 +10,7 @@ This project is deployed on Vercel at: https://adhd-story-gen.vercel.app
 
 - Story generation using AI
 - Video creation with voice-over
-- Social media integration (YouTube, TikTok, Instagram)
+- Social media integration (YouTube, TikTok)
 - User authentication
 - Subscription management
 

@@ -15,27 +15,19 @@ export default function Schedule() {
   const [events, setEvents] = useState([
     {
       id: 1,
-      title: 'AITA for not attending my sister\'s wedding?',
-      date: '2024-03-15',
-      time: '10:00',
-      platform: 'tiktok',
+      title: 'The Wedding Dress Disaster',
+      date: '2024-03-18',
+      time: '18:00',
+      platform: 'youtube',
       thumbnail: '/thumbnails/video1.jpg',
     },
     {
       id: 2,
-      title: 'The Mysterious Package That Arrived at 3 AM',
-      date: '2024-03-16',
-      time: '15:30',
-      platform: 'youtube',
+      title: 'My Neighbor\'s Secret Garden',
+      date: '2024-03-18',
+      time: '20:00',
+      platform: 'tiktok',
       thumbnail: '/thumbnails/video2.jpg',
-    },
-    {
-      id: 3,
-      title: 'My Roommate\'s Strange Behavior',
-      date: '2024-03-17',
-      time: '12:00',
-      platform: 'instagram',
-      thumbnail: '/thumbnails/video3.jpg',
     },
   ]);
 

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { PageContainer } from '@/components/layout/page-container';
 import { SocialPlatform } from '@/lib/social-media/types';
-import { getSocialMediaCredentials } from '@/lib/social-media/schema';
 import { useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -22,7 +21,7 @@ export default function Library() {
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
-  const platforms: SocialPlatform[] = ['youtube', 'tiktok', 'instagram'];
+  const platforms: SocialPlatform[] = ['youtube', 'tiktok'];
 
   useEffect(() => {
     async function loadPlatformStatuses() {
@@ -30,12 +29,30 @@ export default function Library() {
 
       const statuses = await Promise.all(
         platforms.map(async (platform) => {
-          const creds = await getSocialMediaCredentials(user.uid, platform);
-          return {
-            platform,
-            isConnected: !!creds,
-            username: creds?.username || ''
-          };
+          try {
+            const response = await fetch(`/api/social-media/credentials?platform=${platform}`);
+            if (!response.ok) {
+              return {
+                platform,
+                isConnected: false,
+                username: ''
+              };
+            }
+            
+            const data = await response.json();
+            return {
+              platform,
+              isConnected: data.connected,
+              username: data.username || ''
+            };
+          } catch (error) {
+            console.error(`Error fetching ${platform} credentials:`, error);
+            return {
+              platform,
+              isConnected: false,
+              username: ''
+            };
+          }
         })
       );
 
@@ -66,16 +83,6 @@ export default function Library() {
       platform: 'youtube' as SocialPlatform,
       status: 'published',
       date: '2024-03-16',
-    },
-    {
-      id: 3,
-      title: 'My Roommate\'s Strange Behavior',
-      thumbnail: '/thumbnails/video3.jpg',
-      views: 250000,
-      likes: 28000,
-      platform: 'instagram' as SocialPlatform,
-      status: 'published',
-      date: '2024-03-14',
     },
   ];
 

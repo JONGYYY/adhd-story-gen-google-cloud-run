@@ -17,13 +17,6 @@ const TIKTOK_OAUTH_CONFIG = {
   scope: ['video.upload', 'video.list', 'user.info.basic'].join(',')
 };
 
-const INSTAGRAM_OAUTH_CONFIG = {
-  clientId: process.env.INSTAGRAM_CLIENT_ID!,
-  clientSecret: process.env.INSTAGRAM_CLIENT_SECRET!,
-  redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`,
-  scope: ['user_profile', 'user_media'].join(',')
-};
-
 export function getOAuthUrl(platform: SocialPlatform): string {
   switch (platform) {
     case 'youtube':
@@ -42,13 +35,6 @@ export function getOAuthUrl(platform: SocialPlatform): string {
         `scope=${encodeURIComponent(TIKTOK_OAUTH_CONFIG.scope)}&` +
         `response_type=code`;
     
-    case 'instagram':
-      return `https://api.instagram.com/oauth/authorize` +
-        `?client_id=${INSTAGRAM_OAUTH_CONFIG.clientId}&` +
-        `redirect_uri=${encodeURIComponent(INSTAGRAM_OAUTH_CONFIG.redirectUri)}&` +
-        `scope=${encodeURIComponent(INSTAGRAM_OAUTH_CONFIG.scope)}&` +
-        `response_type=code`;
-    
     default:
       throw new Error(`Unsupported platform: ${platform}`);
   }
@@ -63,8 +49,6 @@ export async function handleOAuthCallback(
       return handleYouTubeCallback(code);
     case 'tiktok':
       return handleTikTokCallback(code);
-    case 'instagram':
-      return handleInstagramCallback(code);
     default:
       throw new Error(`Unsupported platform: ${platform}`);
   }
@@ -135,35 +119,5 @@ async function handleTikTokCallback(code: string): Promise<SocialMediaCredential
     userId: userData.user.id,
     username: userData.user.username,
     profileId: userData.user.open_id
-  };
-}
-
-async function handleInstagramCallback(code: string): Promise<SocialMediaCredentials> {
-  // Exchange code for tokens
-  const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: INSTAGRAM_OAUTH_CONFIG.clientId,
-      client_secret: INSTAGRAM_OAUTH_CONFIG.clientSecret,
-      redirect_uri: INSTAGRAM_OAUTH_CONFIG.redirectUri,
-      grant_type: 'authorization_code'
-    })
-  });
-
-  const tokens = await tokenResponse.json();
-
-  // Get user info
-  const userResponse = await fetch(`https://graph.instagram.com/me?fields=id,username&access_token=${tokens.access_token}`);
-  const userData = await userResponse.json();
-
-  return {
-    platform: 'instagram',
-    accessToken: tokens.access_token,
-    expiresAt: Date.now() + (tokens.expires_in * 1000),
-    userId: userData.id,
-    username: userData.username,
-    profileId: userData.id
   };
 } 

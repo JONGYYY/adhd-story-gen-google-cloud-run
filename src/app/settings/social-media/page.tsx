@@ -1,7 +1,6 @@
 'use client';
 
 import { getOAuthUrl } from '@/lib/social-media/oauth';
-import { getSocialMediaCredentials } from '@/lib/social-media/schema';
 import { SocialPlatform } from '@/lib/social-media/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useEffect, useState } from 'react';
@@ -15,8 +14,7 @@ interface ConnectedPlatform {
 export default function SocialMediaSettings() {
   const [platforms, setPlatforms] = useState<ConnectedPlatform[]>([
     { platform: 'youtube', username: '', connected: false },
-    { platform: 'tiktok', username: '', connected: false },
-    { platform: 'instagram', username: '', connected: false }
+    { platform: 'tiktok', username: '', connected: false }
   ]);
   const { user } = useAuth();
 
@@ -27,12 +25,30 @@ export default function SocialMediaSettings() {
 
       const updatedPlatforms = await Promise.all(
         platforms.map(async (p) => {
-          const creds = await getSocialMediaCredentials(user.uid, p.platform);
-          return {
-            ...p,
-            username: creds?.username || '',
-            connected: !!creds
-          };
+          try {
+            const response = await fetch(`/api/social-media/credentials?platform=${p.platform}`);
+            if (!response.ok) {
+              return {
+                ...p,
+                username: '',
+                connected: false
+              };
+            }
+            
+            const data = await response.json();
+            return {
+              ...p,
+              username: data.username || '',
+              connected: data.connected
+            };
+          } catch (error) {
+            console.error(`Error fetching ${p.platform} credentials:`, error);
+            return {
+              ...p,
+              username: '',
+              connected: false
+            };
+          }
         })
       );
 

@@ -40,7 +40,7 @@ export default function Dashboard() {
     }
   ];
 
-  const platforms: SocialPlatform[] = ['youtube', 'tiktok', 'instagram'];
+  const platforms: SocialPlatform[] = ['youtube', 'tiktok'];
 
   return (
     <PageContainer>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-type Platform = 'tiktok' | 'youtube_shorts' | 'instagram_reels';
+type Platform = 'tiktok' | 'youtube_shorts';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate platforms
-    const validPlatforms: Platform[] = ['tiktok', 'youtube_shorts', 'instagram_reels'];
+    const validPlatforms: Platform[] = ['tiktok', 'youtube_shorts'];
     const invalidPlatforms = platforms.filter((p: string) => !validPlatforms.includes(p as Platform));
     if (invalidPlatforms.length > 0) {
       return NextResponse.json(

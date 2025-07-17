@@ -122,7 +122,7 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {['YouTube', 'TikTok', 'Instagram', 'Twitter'].map((platform) => (
+                  {['YouTube', 'TikTok', 'Twitter'].map((platform) => (
                     <div key={platform} className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="font-medium">{platform}</div>

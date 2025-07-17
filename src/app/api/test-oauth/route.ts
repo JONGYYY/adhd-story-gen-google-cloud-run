@@ -8,12 +8,9 @@ export async function GET() {
       youtubeClientSecret: process.env.YOUTUBE_CLIENT_SECRET ? 'Set' : 'Missing',
       tiktokClientKey: process.env.TIKTOK_CLIENT_KEY ? 'Set' : 'Missing',
       tiktokClientSecret: process.env.TIKTOK_CLIENT_SECRET ? 'Set' : 'Missing',
-      instagramAppId: process.env.INSTAGRAM_APP_ID ? 'Set' : 'Missing',
-      instagramAppSecret: process.env.INSTAGRAM_APP_SECRET ? 'Set' : 'Missing',
       redirectUrls: {
         youtube: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/youtube/callback`,
         tiktok: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback`,
-        instagram: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`,
       }
     };
 

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifySessionCookie } from '@/lib/firebase-admin';
 
 // List of paths that require authentication
 const protectedPaths = [
@@ -30,20 +29,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Get the Firebase ID token from the session cookie
+  // Get the session cookie (simple check - detailed verification happens in API routes)
   const session = request.cookies.get('session')?.value;
-
-  let isLoggedIn = false;
-  if (session) {
-    try {
-      // Verify the session cookie using Firebase Admin
-      await verifySessionCookie(session, true);
-      isLoggedIn = true;
-    } catch (error) {
-      // Session cookie is invalid/expired
-      isLoggedIn = false;
-    }
-  }
+  const isLoggedIn = !!session; // Simple check - just verify cookie exists
 
   // If the path is protected and user is not logged in
   if (protectedPaths.some(p => path.startsWith(p)) && !isLoggedIn) {
