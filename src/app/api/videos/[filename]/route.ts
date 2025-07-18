@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import { createReadStream, statSync } from 'fs';
 import path from 'path';
+import os from 'os';
+
+// Helper function to get the appropriate tmp directory
+function getTmpDir(): string {
+  // Use /tmp for Vercel, os.tmpdir() for local development
+  return process.env.VERCEL ? '/tmp' : os.tmpdir();
+}
 
 export async function GET(
   request: Request,
@@ -9,12 +16,16 @@ export async function GET(
 ) {
   try {
     const filename = params.filename;
-    const videoPath = path.join(process.cwd(), 'public', 'videos', filename);
+    const tmpDir = getTmpDir();
+    const videoPath = path.join(tmpDir, filename);
+
+    console.log('Looking for video at:', videoPath);
 
     // Check if file exists
     try {
       await fs.access(videoPath);
     } catch {
+      console.log('Video not found at:', videoPath);
       return new NextResponse('Video not found', { status: 404 });
     }
 
@@ -22,6 +33,8 @@ export async function GET(
     const stat = statSync(videoPath);
     const fileSize = stat.size;
     const range = request.headers.get('range');
+
+    console.log('Serving video:', filename, 'Size:', fileSize);
 
     if (range) {
       // Handle range request

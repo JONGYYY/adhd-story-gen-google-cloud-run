@@ -518,6 +518,15 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         opening_audio = normalize_audio(opening_audio)
         story_audio = normalize_audio(story_audio)
         
+        # Load and prepare background video
+        background = VideoFileClip(background_path)
+        
+        # Resize to 9:16 aspect ratio
+        target_width = 1080
+        target_height = 1920
+        background = background.resize(height=target_height)
+        background = background.crop(x1=(background.w - target_width) // 2, width=target_width)
+        
         # Create opening banner
         opening_banner = create_reddit_banner(
             story_data['title'],
@@ -534,8 +543,8 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         ).set_audio(opening_audio)
         
         # Generate captions for story
-        story_wav_path, temp_dir = convert_audio_to_wav(story_audio_path)
-        temp_dirs.append(temp_dir)
+        story_wav_path, temp_wav_dir = convert_audio_to_wav(story_audio_path)
+        temp_dirs.append(temp_wav_dir)
         
         try:
             words = get_word_timestamps(story_wav_path)
@@ -606,13 +615,26 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         background.close()
         opening_audio.close()
         story_audio.close()
+        
+        # Clean up temporary files
+        try:
+            os.remove(temp_opening_audio)
+            os.remove(temp_story_audio)
+        except:
+            pass  # Ignore cleanup errors
+        
         for temp_dir in temp_dirs:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except:
+                pass
         for temp_file in temp_files:
             try:
                 os.remove(temp_file)
             except:
                 pass
+                
+        logger.info("Video generation completed successfully")
             
     except Exception as e:
         logger.error(f"Error generating video: {str(e)}")
