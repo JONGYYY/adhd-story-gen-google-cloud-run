@@ -2,6 +2,10 @@
   "functions": {
     "src/app/api/*/route.ts": {
       "maxDuration": 300
+    },
+    "api/generate-video-python.py": {
+      "runtime": "python3.11",
+      "maxDuration": 300
     }
   },
   "build": {
