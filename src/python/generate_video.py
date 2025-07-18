@@ -527,20 +527,8 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         background = background.resize(height=target_height)
         background = background.crop(x1=(background.w - target_width) // 2, width=target_width)
         
-        # Create opening banner
-        opening_banner = create_reddit_banner(
-            story_data['title'],
-            username=story_data['author']
-        ).set_duration(opening_audio.duration)
-        
-        # Create opening segment
-        opening_segment = CompositeVideoClip(
-            [
-                background.subclip(0, opening_audio.duration),
-                opening_banner
-            ],
-            size=(target_width, target_height)
-        ).set_audio(opening_audio)
+        # Create simple opening segment without banner for now
+        opening_segment = background.subclip(0, opening_audio.duration).set_audio(opening_audio)
         
         # Generate captions for story
         story_wav_path, temp_wav_dir = convert_audio_to_wav(story_audio_path)
@@ -588,10 +576,7 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         except Exception as e:
             logger.error(f"Failed to process audio: {str(e)}")
             # If caption generation fails, create a video without captions
-            story_segment = CompositeVideoClip(
-                [background.subclip(opening_audio.duration, opening_audio.duration + story_audio.duration)],
-                size=(target_width, target_height)
-            ).set_audio(story_audio)
+            story_segment = background.subclip(opening_audio.duration, opening_audio.duration + story_audio.duration).set_audio(story_audio)
             
             final_video = concatenate_videoclips(
                 [opening_segment, story_segment],
@@ -599,10 +584,10 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
             )
             
             final_video.write_videofile(
-            output_path,
-            fps=30,
-            codec='libx264',
-            audio_codec='aac',
+                output_path,
+                fps=30,
+                codec='libx264',
+                audio_codec='aac',
                 audio_bitrate='192k',
                 bitrate='8000k',
                 temp_audiofile='temp-audio.m4a',
@@ -615,13 +600,6 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         background.close()
         opening_audio.close()
         story_audio.close()
-        
-        # Clean up temporary files
-        try:
-            os.remove(temp_opening_audio)
-            os.remove(temp_story_audio)
-        except:
-            pass  # Ignore cleanup errors
         
         for temp_dir in temp_dirs:
             try:
