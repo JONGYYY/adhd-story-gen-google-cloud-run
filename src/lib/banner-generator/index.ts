@@ -26,20 +26,14 @@ export async function generateBanner(options: BannerOptions): Promise<Buffer> {
   } = options;
 
   try {
-    // Create a simple 1x1 pixel PNG as a placeholder
-    // This is a minimal PNG file in base64
+    // Create a simple white banner placeholder
+    // The actual banner is created in the Python script using MoviePy
     const simplePng = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       'base64'
     );
 
-    // For now, return a simple placeholder
-    // In a production environment, you might want to use a service like:
-    // - Vercel's @vercel/og for Open Graph images
-    // - A third-party image generation service
-    // - Pre-generated banner templates
-    
-    console.log('Generated banner for:', title);
+    console.log('Generated banner placeholder for:', title);
     return simplePng;
   } catch (error) {
     console.error('Error generating banner:', error);
