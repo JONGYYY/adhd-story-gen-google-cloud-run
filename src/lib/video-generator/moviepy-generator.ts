@@ -25,11 +25,16 @@ function getTmpDir(): string {
 
 // Helper function to run Python script
 async function runPythonScript(scriptPath: string, args: string[]): Promise<void> {
-  const venvPythonPath = path.join(process.cwd(), 'venv', 'bin', 'python3');
+  // Use different Python paths for local vs Vercel
+  const pythonPath = process.env.VERCEL 
+    ? 'python3'  // Use system Python on Vercel
+    : path.join(process.cwd(), 'venv', 'bin', 'python3'); // Use venv locally
+  
+  console.log('Using Python path:', pythonPath);
   
   return new Promise((resolve, reject) => {
-    // Activate virtual environment and run script
-    const pythonProcess = spawn(venvPythonPath, [scriptPath, ...args]);
+    // Run Python script
+    const pythonProcess = spawn(pythonPath, [scriptPath, ...args]);
     let stdoutData = '';
     let stderrData = '';
 
