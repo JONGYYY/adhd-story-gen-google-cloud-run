@@ -37,6 +37,9 @@ export const metadata: Metadata = {
     description: 'Transform trending Reddit stories or generate original content into engaging short-form videos.',
     creator: '@storygen_ai',
   },
+  other: {
+    'tiktok-developers-site-verification': '5Kt6Vq9a21F6XcwGsCk9MrAw2mymMuFj'
+  }
 };
 
 export default function RootLayout({
@@ -46,6 +49,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta name="tiktok-developers-site-verification" content="5Kt6Vq9a21F6XcwGsCk9MrAw2mymMuFj" />
+      </head>
       <body className={GeistSans.className}>
         <ThemeProvider
           attribute="class"
