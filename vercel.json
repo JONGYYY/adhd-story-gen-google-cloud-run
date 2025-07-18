@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "src/app/api/*/route.ts": {
+      "maxDuration": 300
+    }
+  },
+  "build": {
+    "env": {
+      "PYTHON_VERSION": "3.11"
+    }
+  }
+} 

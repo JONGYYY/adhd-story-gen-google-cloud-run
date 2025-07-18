@@ -6,6 +6,9 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ['localhost:3000', 'adhd-story-gen.vercel.app', 'taleo.media'],
     },
+    outputFileTracingIncludes: {
+      '/api/**/*': ['./src/python/**/*', './public/backgrounds/**/*'],
+    },
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
