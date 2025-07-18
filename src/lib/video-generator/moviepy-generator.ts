@@ -62,6 +62,14 @@ async function runPythonScript(scriptPath: string, args: string[]): Promise<void
   });
 }
 
+async function saveBannerToFile(bannerBuffer: Buffer, videoId: string): Promise<string> {
+  const tmpDir = getTmpDir();
+  await fs.mkdir(tmpDir, { recursive: true });
+  const bannerPath = path.join(tmpDir, `banner_${videoId}.png`);
+  await fs.writeFile(bannerPath, bannerBuffer);
+  return bannerPath;
+}
+
 export async function generateVideo(
   options: VideoGenerationOptions,
   videoId: string

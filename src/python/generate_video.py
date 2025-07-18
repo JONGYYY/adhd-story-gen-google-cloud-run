@@ -22,17 +22,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def get_temp_dir():
-    """Get the appropriate temporary directory."""
-    if os.environ.get('VERCEL'):
-        # Use /tmp on Vercel
-        temp_dir = '/tmp'
-        os.makedirs(temp_dir, exist_ok=True)
-        return temp_dir
-    else:
-        # Use system temp directory locally
-        return tempfile.gettempdir()
-
 def get_word_timestamps(audio_path):
     """Get word-level timestamps using OpenAI Whisper."""
     try:
@@ -57,6 +46,17 @@ def get_word_timestamps(audio_path):
     except Exception as e:
         logger.error(f"Failed to get word timestamps: {e}")
         return []
+
+def get_temp_dir():
+    """Get the appropriate temporary directory."""
+    if os.environ.get('VERCEL'):
+        # Use /tmp on Vercel
+        temp_dir = '/tmp'
+        os.makedirs(temp_dir, exist_ok=True)
+        return temp_dir
+    else:
+        # Use system temp directory locally
+        return tempfile.gettempdir()
 
 def validate_story_data(story_data):
     """Validate the story data structure."""
@@ -132,24 +132,68 @@ def create_profile_image(size):
     draw = ImageDraw.Draw(mask)
     draw.ellipse((0, 0, size, size), fill=255)
     
-    # Create orange background as fallback
-    img = Image.new('RGB', (size, size), (255, 69, 0))  # Reddit orange
-    draw = ImageDraw.Draw(img)
-    
-    # Draw the head (white circle)
-    head_size = int(size * 0.7)
-    head_pos = ((size - head_size) // 2, (size - head_size) // 2)
-    draw.ellipse(
-        (head_pos[0], head_pos[1], head_pos[0] + head_size, head_pos[1] + head_size),
-        fill='white'
-    )
+    # Load and resize the Reddit logo
+    logo_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'reddit-logo.png')
+    try:
+        img = Image.open(logo_path)
+        img = img.resize((size, size), Image.Resampling.LANCZOS)
+    except Exception as e:
+        logger.warning(f"Failed to load Reddit logo: {e}. Using fallback.")
+        # Create orange background as fallback
+        img = Image.new('RGB', (size, size), (255, 69, 0))  # Reddit orange
+        draw = ImageDraw.Draw(img)
+        
+        # Draw the head (white circle)
+        head_size = int(size * 0.7)
+        head_pos = ((size - head_size) // 2, (size - head_size) // 2)
+        draw.ellipse(
+            (head_pos[0], head_pos[1], head_pos[0] + head_size, head_pos[1] + head_size),
+            fill='white'
+        )
     
     # Apply circular mask
     img.putalpha(mask)
     
     return np.array(img)
 
-def create_reddit_banner(text, username="Anonymous", size=(1080, 1920)):
+def load_reddit_logo(size):
+    """Load and process the Reddit logo image."""
+    temp_dir = get_temp_dir()
+    
+    # Define the SVG data for the Reddit logo
+    svg_data = '''
+    <svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="50" fill="#FF4500"/>
+        <path d="M50 25 C40 25 30 35 30 45 C30 55 40 65 50 65 C60 65 70 55 70 45 C70 35 60 25 50 25" fill="white"/>
+        <circle cx="35" cy="45" r="5" fill="#FF4500"/>
+        <circle cx="65" cy="45" r="5" fill="#FF4500"/>
+        <path d="M35 55 Q50 65 65 55" stroke="white" stroke-width="3" fill="none"/>
+    </svg>
+    '''.format(size=size)
+    
+    # Save SVG to a temporary file
+    temp_svg = os.path.join(temp_dir, f'reddit_logo_{size}.svg')
+    temp_png = os.path.join(temp_dir, f'reddit_logo_{size}.png')
+    
+    with open(temp_svg, 'w') as f:
+        f.write(svg_data)
+    
+    # Convert SVG to PNG using ImageMagick
+    os.system(f'convert {temp_svg} {temp_png}')
+    
+    # Load the PNG
+    img = Image.open(temp_png)
+    
+    # Clean up temporary files
+    try:
+        os.remove(temp_svg)
+        os.remove(temp_png)
+    except:
+        pass  # Ignore cleanup errors
+    
+    return np.array(img)
+
+def create_reddit_banner(text, username="RoseyReddit", size=(1080, 1920)):
     """Create a Reddit-style banner with text."""
     try:
         # Calculate banner dimensions
@@ -188,7 +232,7 @@ def create_reddit_banner(text, username="Anonymous", size=(1080, 1920)):
         profile_img = profile_img.set_position((profile_margin, profile_margin))  # Position at top left
         
         # Create username next to profile image with same style as title
-        username_text = f"@{username}"
+        username_text = "@anonymous"
         username_clip = TextClip(
             username_text,
             fontsize=title_fontsize,  # Same size as title
@@ -408,6 +452,70 @@ def process_words_into_phrases(words):
         })
     
     return segments
+
+async def create_video(story_data, background_options, voice_options):
+    """Create a video with the given story, background, and voice options."""
+    try:
+        # Create temporary directory for intermediate files
+        tmp_dir = os.path.join(os.getcwd(), 'tmp')
+        os.makedirs(tmp_dir, exist_ok=True)
+
+        # Generate audio with TTS
+        audio_path = os.path.join(tmp_dir, 'audio.mp3')
+        generate_audio(story_data["story"], voice_options, audio_path)
+
+        # Get audio duration
+        audio_duration = get_audio_duration(audio_path)
+        
+        # Process text into timed segments
+        words = get_word_timings(story_data["story"], audio_duration)
+        segments = process_words_into_phrases(words)
+        
+        # Generate subtitles file
+        subtitles_path = os.path.join(tmp_dir, 'subtitles.ass')
+        await generateAssFile(segments, subtitles_path)
+        
+        # Select and process background clips
+        background_clips = await selectBackgroundClips(background_options, audio_duration)
+        processed_clips = []
+        
+        for clip in background_clips:
+            processed_path = await processBackgroundClip(clip)
+            processed_clips.append(processed_path)
+        
+        # Combine everything into final video
+        output_path = os.path.join(tmp_dir, 'output.mp4')
+        
+        # Create the final video with FFmpeg
+        ffmpeg_cmd = [
+            'ffmpeg', '-y',
+            '-i', processed_clips[0],  # First background clip
+        ]
+        
+        # Add remaining background clips
+        for i in range(1, len(processed_clips)):
+            ffmpeg_cmd.extend(['-i', processed_clips[i]])
+        
+        # Add audio
+        ffmpeg_cmd.extend([
+            '-i', audio_path,
+            '-vf', f'subtitles={subtitles_path}',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '22',
+            '-c:a', 'aac',
+            '-strict', 'experimental',
+            output_path
+        ])
+        
+        # Execute FFmpeg command
+        subprocess.run(ffmpeg_cmd, check=True)
+    
+        return output_path
+        
+    except Exception as e:
+        print(f"Error in create_video: {str(e)}")
+        raise e
 
 def main(video_id, opening_audio_path, story_audio_path, background_path, banner_path, output_path, story_json):
     temp_dirs = []

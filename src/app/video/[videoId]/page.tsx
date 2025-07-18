@@ -23,18 +23,6 @@ export default function VideoPage() {
   const checkStatusTimeoutRef = useRef<NodeJS.Timeout>();
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Helper function to determine if the URL is an HTML file
-  const isHtmlFile = (url: string) => {
-    return url.includes('.html') || url.includes('video_') && url.includes('.html');
-  };
-
-  // Helper function to get the audio file URL from an HTML video URL
-  const getAudioUrl = (htmlUrl: string) => {
-    // Convert video_123.html to audio_123.mp3
-    const videoId = htmlUrl.match(/video_([^.]+)\.html/)?.[1];
-    return videoId ? `/api/videos/audio_${videoId}.mp3` : null;
-  };
-
   useEffect(() => {
     const checkStatus = async () => {
       try {
@@ -103,33 +91,21 @@ export default function VideoPage() {
     if (!videoStatus.videoUrl) return;
 
     try {
-      let downloadUrl = videoStatus.videoUrl;
-      let filename = `video_${videoId}.mp4`;
-
-      // If it's an HTML file, download the audio file instead
-      if (isHtmlFile(videoStatus.videoUrl)) {
-        const audioUrl = getAudioUrl(videoStatus.videoUrl);
-        if (audioUrl) {
-          downloadUrl = audioUrl;
-          filename = `audio_${videoId}.mp3`;
-        }
-      }
-
-      const response = await fetch(downloadUrl);
-      if (!response.ok) throw new Error('Failed to download file');
+      const response = await fetch(videoStatus.videoUrl);
+      if (!response.ok) throw new Error('Failed to download video');
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      a.download = `video_${videoId}.mp4`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
       console.error('Download error:', error);
-      setVideoError('Failed to download file. Please try again.');
+      setVideoError('Failed to download video. Please try again.');
     }
   };
 
@@ -140,29 +116,15 @@ export default function VideoPage() {
     setUploadError(null);
     
     try {
-      let uploadUrl = videoStatus.videoUrl;
-      let filename = `video_${videoId}.mp4`;
-      
-      // If it's an HTML file, we need to get the audio file for upload
-      if (isHtmlFile(videoStatus.videoUrl)) {
-        const audioUrl = getAudioUrl(videoStatus.videoUrl);
-        if (audioUrl) {
-          uploadUrl = audioUrl;
-          filename = `audio_${videoId}.mp3`;
-        } else {
-          throw new Error('Could not find audio file for upload');
-        }
-      }
-
-      // Get the file
-      const fileResponse = await fetch(uploadUrl);
-      if (!fileResponse.ok) throw new Error('Failed to fetch file');
-      const fileBlob = await fileResponse.blob();
+      // Get the video file
+      const videoResponse = await fetch(videoStatus.videoUrl);
+      if (!videoResponse.ok) throw new Error('Failed to fetch video');
+      const videoBlob = await videoResponse.blob();
       
       // Create form data
       const formData = new FormData();
-      formData.append('video', fileBlob, filename);
-      formData.append('title', `Story Audio #${videoId}`);
+      formData.append('video', videoBlob, `video_${videoId}.mp4`);
+      formData.append('title', `Story Video #${videoId}`);
       formData.append('privacy_level', 'SELF_ONLY'); // Start with private for safety
       
       // Upload to TikTok
@@ -182,7 +144,7 @@ export default function VideoPage() {
       }
       
       // Show success message
-      alert('Audio uploaded to TikTok successfully! Check your TikTok drafts.');
+      alert('Video uploaded to TikTok successfully! Check your TikTok drafts.');
       
     } catch (error) {
       console.error('TikTok upload error:', error);
@@ -224,7 +186,7 @@ export default function VideoPage() {
             {videoStatus.status === 'ready' && videoStatus.videoUrl && (
               <div className="text-center py-8">
                 <div className="mb-4 text-4xl">🎉</div>
-                <h2 className="text-xl font-semibold mb-4">Your Story is Ready!</h2>
+                <h2 className="text-xl font-semibold mb-4">Your Video is Ready!</h2>
                 
                 <div className="mb-6">
                   {videoError ? (
@@ -235,26 +197,13 @@ export default function VideoPage() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="w-full">
-                      {isHtmlFile(videoStatus.videoUrl) ? (
-                        // Display HTML content in iframe
-                        <iframe
-                          src={videoStatus.videoUrl}
-                          className="w-full h-96 rounded-lg border border-gray-600"
-                          title="Story Player"
-                          allow="autoplay"
-                        />
-                      ) : (
-                        // Display video content
-                        <video
-                          ref={videoRef}
-                          className="w-full rounded-lg"
-                          controls
-                          src={videoStatus.videoUrl}
-                          onError={handleVideoError}
-                        />
-                      )}
-                    </div>
+                    <video
+                      ref={videoRef}
+                      className="w-full rounded-lg"
+                      controls
+                      src={videoStatus.videoUrl}
+                      onError={handleVideoError}
+                    />
                   )}
                 </div>
 
@@ -270,7 +219,7 @@ export default function VideoPage() {
                     className="px-6"
                     disabled={!!videoError}
                   >
-                    {isHtmlFile(videoStatus.videoUrl || '') ? 'Download Audio' : 'Download Video'}
+                    Download Video
                   </Button>
                   <Button
                     onClick={handleTikTokUpload}
