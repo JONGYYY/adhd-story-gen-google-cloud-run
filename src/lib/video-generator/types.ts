@@ -38,7 +38,6 @@ export type VideoOptions = {
   isCliffhanger: boolean;
   background: VideoBackground;
   voice: VoiceOption;
-  playbackSpeed: number;
   captionStyle: CaptionStyle;
   uiOverlay: UIOverlay;
   customStory?: {

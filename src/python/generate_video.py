@@ -492,7 +492,7 @@ async def create_video(story_data, background_options, voice_options):
         print(f"Error in create_video: {str(e)}")
         raise e
 
-def main(video_id, opening_audio_path, story_audio_path, background_path, banner_path, output_path, story_json, playback_speed):
+def main(video_id, opening_audio_path, story_audio_path, background_path, banner_path, output_path, story_json):
     temp_dirs = []
     temp_files = []  # Track temporary files for cleanup
     try:
@@ -510,19 +510,9 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         validate_story_data(story_data)
         validate_files(opening_audio_path, story_audio_path, background_path, banner_path)
         
-        # Convert playback_speed to float
-        speed = float(playback_speed)
-        
-        # Process audio files with speed adjustment
-        temp_opening_audio = os.path.join(temp_dir, f'opening_{video_id}.wav')
-        temp_story_audio = os.path.join(temp_dir, f'story_{video_id}.wav')
-        
-        process_audio_with_speed(opening_audio_path, speed, temp_opening_audio)
-        process_audio_with_speed(story_audio_path, speed, temp_story_audio)
-        
         # Load audio clips
-        opening_audio = AudioFileClip(temp_opening_audio)
-        story_audio = AudioFileClip(temp_story_audio)
+        opening_audio = AudioFileClip(opening_audio_path)
+        story_audio = AudioFileClip(story_audio_path)
         
         # Normalize audio levels
         opening_audio = normalize_audio(opening_audio)
@@ -600,17 +590,17 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
             )
             
             final_video.write_videofile(
-            output_path,
-            fps=30,
-            codec='libx264',
-            audio_codec='aac',
+                output_path,
+                fps=30,
+                codec='libx264',
+                audio_codec='aac',
                 audio_bitrate='192k',
                 bitrate='8000k',
                 temp_audiofile='temp-audio.m4a',
                 remove_temp=True,
                 threads=4,
                 preset='medium'
-        )
+            )
         
         # Cleanup
         background.close()
@@ -649,7 +639,7 @@ if __name__ == "__main__":
         background = sys.argv[4]
         banner = sys.argv[5]
         output = sys.argv[6]
-        story_data = json.loads(sys.argv[7])
+        story_data = sys.argv[7]
         
         main(video_id, opening_audio, story_audio, background, banner, output, story_data)
     except Exception as e:

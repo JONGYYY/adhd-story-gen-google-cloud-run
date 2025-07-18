@@ -23,7 +23,6 @@ export default function Create() {
   const [selectedBackground, setSelectedBackground] = useState<string | null>(null);
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
   const [storyLength, setStoryLength] = useState<'1 min+ (Cliffhanger)' | 'Full Story Length'>('1 min+ (Cliffhanger)');
-  const [playbackSpeed, setPlaybackSpeed] = useState<string>('1.0');
   const [captionStyle, setCaptionStyle] = useState('modern');
   const [showRedditUI, setShowRedditUI] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -216,9 +215,6 @@ export default function Create() {
         return;
       }
 
-      // Extract just the number from playback speed (e.g., "1.0x (Normal)" -> 1.0)
-      const speedValue = parseFloat(playbackSpeed.split('x')[0]);
-
       // Prepare story data based on source
       let storyData: {
         title: string;
@@ -246,13 +242,12 @@ export default function Create() {
         isCliffhanger: storyLength === '1 min+ (Cliffhanger)',
         background: {
           category: selectedBackground as VideoBackground['category'],
-          speedMultiplier: speedValue,
+          speedMultiplier: 1.0,
         },
         voice: {
           id: selectedVoice,
           gender: selectedVoiceData.gender,
         },
-        playbackSpeed: speedValue,
         captionStyle: {
           font: 'Arial-Bold',
           size: 72,
@@ -655,74 +650,34 @@ export default function Create() {
             </div>
 
             {/* Additional Options */}
-            <div>
-              <h2 className="text-lg font-medium mb-4">Additional Options</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Caption Style
-                  </label>
-                  <select
-                    value={captionStyle}
-                    onChange={(e) => setCaptionStyle(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-                  >
-                    <option value="modern">Modern</option>
-                    <option value="classic">Classic</option>
-                    <option value="minimal">Minimal</option>
-                    <option value="bold">Bold</option>
-                  </select>
-                </div>
-                  <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Video Length
-                    </label>
-                  <select
-                    value={storyLength}
-                    onChange={(e) => setStoryLength(e.target.value as '1 min+ (Cliffhanger)' | 'Full Story Length')}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-                  >
-                    <option>1 min+ (Cliffhanger)</option>
-                    <option>Full Story Length</option>
-                    </select>
-                  </div>
-                  <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Playback Speed
-                    </label>
-                  <select
-                    value={playbackSpeed}
-                    onChange={(e) => setPlaybackSpeed(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
-                  >
-                    <option>1.0x (Normal)</option>
-                    <option>1.1x</option>
-                    <option>1.2x</option>
-                    <option>1.3x</option>
-                    <option>1.4x</option>
-                    <option>1.5x</option>
-                    <option>1.6x</option>
-                    <option>1.7x</option>
-                    <option>1.8x</option>
-                    <option>1.9x</option>
-                    <option>2.0x</option>
-                    </select>
-                  </div>
-                  <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Reddit UI Elements
-                    </label>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={showRedditUI}
-                      onChange={(e) => setShowRedditUI(e.target.checked)}
-                      className="rounded border-gray-700 bg-gray-800"
-                    />
-                    <span className="text-sm text-gray-400">
-                      Show upvotes and other Reddit UI elements
-                    </span>
-                  </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Video Length
+                </label>
+                <select
+                  value={storyLength}
+                  onChange={(e) => setStoryLength(e.target.value as '1 min+ (Cliffhanger)' | 'Full Story Length')}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2"
+                >
+                  <option>1 min+ (Cliffhanger)</option>
+                  <option>Full Story Length</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Reddit UI Elements
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={showRedditUI}
+                    onChange={(e) => setShowRedditUI(e.target.checked)}
+                    className="rounded border-gray-700 bg-gray-800"
+                  />
+                  <span className="text-sm text-gray-400">
+                    Show upvotes and other Reddit UI elements
+                  </span>
                 </div>
               </div>
             </div>

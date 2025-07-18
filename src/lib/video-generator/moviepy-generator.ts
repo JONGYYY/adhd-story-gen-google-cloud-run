@@ -72,17 +72,14 @@ export async function generateVideo(
   try {
     // Create necessary directories
     const tmpDir = getTmpDir();
-    const publicVideosDir = path.join(process.cwd(), 'public', 'videos');
     const pythonScriptsDir = path.join(process.cwd(), 'src', 'python');
     
     console.log('Creating directories:', {
       tmpDir,
-      publicVideosDir,
       pythonScriptsDir
     });
     
     await fs.mkdir(tmpDir, { recursive: true });
-    await fs.mkdir(publicVideosDir, { recursive: true });
     await fs.mkdir(pythonScriptsDir, { recursive: true });
 
     // 1. Story is already provided (10%)
@@ -133,7 +130,7 @@ export async function generateVideo(
 
     // 6. Generate final video (90%)
     const outputFilename = `output_${videoId}.mp4`;
-    const outputPath = path.join(publicVideosDir, outputFilename);
+    const outputPath = path.join(tmpDir, outputFilename);
 
     console.log('Running Python script with args:', {
       videoId,
@@ -142,8 +139,7 @@ export async function generateVideo(
       backgroundPath,
       bannerPath,
       outputPath,
-      story,
-      playbackSpeed: options.playbackSpeed
+      story
     });
 
     await runPythonScript(path.join(pythonScriptsDir, 'generate_video.py'), [
@@ -153,8 +149,7 @@ export async function generateVideo(
       backgroundPath,
       bannerPath,
       outputPath,
-      JSON.stringify(story),
-      options.playbackSpeed.toString()  // Add playback speed as the 8th argument
+      JSON.stringify(story)
     ]);
     
     await updateProgress(videoId, 90);
