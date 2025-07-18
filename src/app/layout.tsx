@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     creator: '@storygen_ai',
   },
   other: {
-    'tiktok-developers-site-verification': '5Kt6Vq9a21F6XcwGsCk9MrAw2mymMuFj'
+    'tiktok-developers-site-verification': 'lCB1D6ic1nHrxoB34K6qSEXbBo1wFThs'
   }
 };
 
@@ -50,7 +50,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="tiktok-developers-site-verification" content="5Kt6Vq9a21F6XcwGsCk9MrAw2mymMuFj" />
+        <meta name="tiktok-developers-site-verification" content="lCB1D6ic1nHrxoB34K6qSEXbBo1wFThs" />
       </head>
       <body className={GeistSans.className}>
         <ThemeProvider

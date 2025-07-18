@@ -8,7 +8,7 @@ export const APP_CONFIG = {
     CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY || '',
     CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET || '',
     REDIRECT_URI: `${process.env.NEXT_PUBLIC_APP_URL || 'https://taleo.media'}/api/auth/tiktok/callback`,
-    VERIFICATION_CODE: '5Kt6Vq9a21F6XcwGsCk9MrAw2mymMuFj'
+    VERIFICATION_CODE: 'lCB1D6ic1nHrxoB34K6qSEXbBo1wFThs'
   },
   
   // Firebase configuration
