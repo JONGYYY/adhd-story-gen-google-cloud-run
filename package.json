@@ -66,6 +66,7 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/typography": "^0.5.16",
+    "@types/fluent-ffmpeg": "^2.1.27",
     "@types/form-data": "^2.2.1",
     "@types/node": "^20",
     "@types/react": "^18",
