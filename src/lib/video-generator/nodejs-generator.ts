@@ -14,10 +14,13 @@ const execAsync = promisify(exec);
 
 // Set ffmpeg path
 if (ffmpegPath) {
+  console.log('ffmpeg-static path:', ffmpegPath);
   ffmpeg.setFfmpegPath(ffmpegPath);
-  // Try to set ffprobe path (it should be in the same directory)
-  const ffprobePath = ffmpegPath.replace('ffmpeg', 'ffprobe');
-  ffmpeg.setFfprobePath(ffprobePath);
+  
+  // Don't try to set ffprobe path since we're not using it
+  console.log('FFmpeg path configured successfully');
+} else {
+  console.error('ffmpeg-static path not found!');
 }
 
 // Helper function to convert ArrayBuffer to Buffer
@@ -106,7 +109,22 @@ export async function generateVideo(
     await fs.mkdir(tmpDir, { recursive: true });
     
     console.log('Starting Node.js-based video generation (recreating MoviePy functionality)...');
-    console.log('FFmpeg path:', ffmpegPath);
+    console.log('Environment:', process.env.VERCEL ? 'Vercel' : 'Local');
+    console.log('FFmpeg path from ffmpeg-static:', ffmpegPath);
+    console.log('Temp directory:', tmpDir);
+    
+    // Test if ffmpeg binary exists and is executable
+    if (ffmpegPath) {
+      try {
+        await fs.access(ffmpegPath);
+        console.log('FFmpeg binary exists and is accessible');
+      } catch (err) {
+        console.error('FFmpeg binary not accessible:', err);
+        throw new Error(`FFmpeg binary not accessible: ${ffmpegPath}`);
+      }
+    } else {
+      throw new Error('FFmpeg path not found from ffmpeg-static');
+    }
     
     // 1. Story is already provided (10%)
     await updateProgress(videoId, 0);
@@ -187,39 +205,54 @@ export async function generateVideo(
     const outputFilename = `output_${videoId}.mp4`;
     const outputPath = path.join(tmpDir, outputFilename);
 
+    console.log('Background video path:', backgroundPath);
+    console.log('Combined audio path:', combinedAudioPath);
+    console.log('Subtitle path:', subtitlePath);
+    console.log('Output path:', outputPath);
+
+    // Check if background video exists
+    try {
+      await fs.access(backgroundPath);
+      console.log('Background video exists');
+    } catch (err) {
+      console.error('Background video not found:', backgroundPath);
+      throw new Error(`Background video not found: ${backgroundPath}`);
+    }
+
     // Create the final video with background, audio, and subtitles
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg()
-        .input(backgroundPath)
-        .input(combinedAudioPath)
-        .inputOptions(['-stream_loop', '-1'])  // Loop background video
-        .videoFilters([
-          'scale=1080:1920:force_original_aspect_ratio=decrease',
-          'pad=1080:1920:(ow-iw)/2:(oh-ih)/2',
-          `subtitles=${subtitlePath}:force_style='Fontsize=72,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=4,Shadow=2'`
-        ])
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .outputOptions([
-          '-shortest',  // Stop when audio ends
-          '-r', '30',   // 30 fps
-          '-preset', 'medium',
-          '-crf', '22',
-          '-movflags', '+faststart'
-        ])
-        .on('end', () => {
-          console.log('Video generation completed successfully');
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error('FFmpeg error:', err);
-          reject(err);
-        })
-        .on('progress', (progress) => {
-          console.log(`Processing: ${Math.round(progress.percent || 0)}% done`);
-        })
-        .save(outputPath);
-    });
+    console.log('Creating video using direct ffmpeg execution...');
+    
+    const ffmpegArgs = [
+      '-stream_loop', '-1',
+      '-i', backgroundPath,
+      '-i', combinedAudioPath,
+      '-vf', [
+        'scale=1080:1920:force_original_aspect_ratio=decrease',
+        'pad=1080:1920:(ow-iw)/2:(oh-ih)/2',
+        `subtitles=${subtitlePath}:force_style='Fontsize=72,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=4,Shadow=2'`
+      ].join(','),
+      '-c:v', 'libx264',
+      '-c:a', 'aac',
+      '-shortest',
+      '-r', '30',
+      '-preset', 'medium',
+      '-crf', '22',
+      '-movflags', '+faststart',
+      '-y', // Overwrite output file
+      outputPath
+    ];
+    
+    console.log('FFmpeg command:', ffmpegPath, ffmpegArgs.join(' '));
+    
+    try {
+      const { stdout, stderr } = await execAsync(`"${ffmpegPath}" ${ffmpegArgs.map(arg => `"${arg}"`).join(' ')}`);
+      console.log('FFmpeg stdout:', stdout);
+      if (stderr) console.log('FFmpeg stderr:', stderr);
+      console.log('Video generation completed successfully');
+    } catch (error) {
+      console.error('FFmpeg execution failed:', error);
+      throw error;
+    }
     
     await updateProgress(videoId, 90);
 
