@@ -8,7 +8,7 @@ export async function GET() {
     message: 'TikTok DNS Verification Information',
     dnsVerification: {
       type: 'TXT',
-      name: '@' || 'adhd-story-gen.vercel.app',
+      name: '@',
       value: 'tiktok-developers-site-verification=5Kt6Vq9a21F6XcwGsCk9MrAw2mymMuFj',
       instructions: [
         '1. Go to Vercel project settings',
