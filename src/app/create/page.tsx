@@ -597,7 +597,7 @@ export default function Create() {
             </div>
 
             {/* Voices */}
-            <div>
+                  <div>
               <h2 className="text-lg font-medium mb-4">Select Voice</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {voices.map((voice) => (
@@ -651,10 +651,10 @@ export default function Create() {
 
             {/* Additional Options */}
             <div className="space-y-4">
-              <div>
+                  <div>
                 <label className="block text-sm font-medium mb-2">
                   Video Length
-                </label>
+                    </label>
                 <select
                   value={storyLength}
                   onChange={(e) => setStoryLength(e.target.value as '1 min+ (Cliffhanger)' | 'Full Story Length')}
@@ -662,14 +662,14 @@ export default function Create() {
                 >
                   <option>1 min+ (Cliffhanger)</option>
                   <option>Full Story Length</option>
-                </select>
-              </div>
-              <div>
+                    </select>
+                  </div>
+                  <div>
                 <label className="block text-sm font-medium mb-2">
                   Reddit UI Elements
-                </label>
+                    </label>
                 <div className="flex items-center space-x-2">
-                  <input
+                    <input
                     type="checkbox"
                     checked={showRedditUI}
                     onChange={(e) => setShowRedditUI(e.target.checked)}
