@@ -1,4 +1,5 @@
 import { generateRandomString } from '@/lib/utils';
+import { APP_CONFIG } from '@/lib/config';
 
 interface TikTokOAuthConfig {
   clientKey: string;
@@ -10,7 +11,7 @@ interface TikTokOAuthConfig {
 const TIKTOK_OAUTH_CONFIG: TikTokOAuthConfig = {
   clientKey: process.env.TIKTOK_CLIENT_KEY || '',
   clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
-  redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback`,
+  redirectUri: `${APP_CONFIG.APP_URL}/api/auth/tiktok/callback`,
   baseUrl: 'https://www.tiktok.com/auth/authorize',
 };
 
@@ -34,8 +35,8 @@ export class TikTokAPI {
     if (!process.env.TIKTOK_CLIENT_SECRET) {
       throw new Error('TIKTOK_CLIENT_SECRET is not set');
     }
-    if (!process.env.NEXT_PUBLIC_APP_URL) {
-      throw new Error('NEXT_PUBLIC_APP_URL is not set');
+    if (!APP_CONFIG.APP_URL) {
+      throw new Error('APP_URL is not set');
     }
   }
 
@@ -45,7 +46,7 @@ export class TikTokAPI {
     // In test mode, redirect to our test endpoint
     if (TEST_MODE) {
       console.log('TikTok TEST MODE: Using test endpoint instead of TikTok OAuth');
-      return `${process.env.NEXT_PUBLIC_APP_URL}/api/force-tiktok-connect?state=${state}`;
+      return `${APP_CONFIG.APP_URL}/api/force-tiktok-connect?state=${state}`;
     }
 
     const params = new URLSearchParams({
@@ -74,7 +75,7 @@ export class TikTokAPI {
         refresh_token: 'test_refresh_token_' + Date.now(),
         expires_in: 3600,
         token_type: 'Bearer',
-        scope: 'user.info.basic,user.info.profile'
+        scope: 'user.info.basic,user.info.profile,video.list,video.upload,video.publish'
       };
     }
     

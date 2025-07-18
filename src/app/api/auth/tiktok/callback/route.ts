@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TikTokAPI } from '@/lib/social-media/tiktok';
 import { verifySessionCookie } from '@/lib/firebase-admin';
 import { setSocialMediaCredentialsServer } from '@/lib/social-media/schema';
+import { APP_CONFIG } from '@/lib/config';
 
 export async function GET(request: NextRequest) {
   console.log('=== TikTok OAuth Callback Started ===');
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     
     if (error) {
       console.error('TikTok OAuth error from callback:', { error, errorDescription });
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         `TikTok OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     
     if (!code) {
       console.error('No authorization code received');
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         'No authorization code received from TikTok'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     if (!state) {
       console.error('No state parameter received');
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         'Invalid OAuth state - possible CSRF attack'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     
     if (!sessionCookie) {
       console.error('No session cookie found');
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         'Not authenticated - please log in'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
     const decodedClaims = await verifySessionCookie(sessionCookie);
     if (!decodedClaims) {
       console.error('Invalid session cookie');
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         'Invalid session - please log in again'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
       console.log('Tokens received successfully:', !!tokens.access_token);
     } catch (error) {
       console.error('Error getting access token:', error);
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         error instanceof Error ? error.message : 'Failed to get access token'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     if (!tokens.access_token) {
       console.error('No access token received:', tokens);
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         'No access token received from TikTok'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
       console.log('User info received successfully:', !!userInfo);
     } catch (error) {
       console.error('Error getting user info:', error);
-      const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+      const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
         error instanceof Error ? error.message : 'Failed to get user info'
       )}`;
       console.log('Redirecting to error page:', redirectUrl);
@@ -164,7 +165,7 @@ export async function GET(request: NextRequest) {
       : 'TikTok connected successfully';
 
     console.log('TikTok OAuth callback completed successfully');
-    const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?${firestoreError ? 'warning' : 'success'}=${encodeURIComponent(successMessage)}`;
+    const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?${firestoreError ? 'warning' : 'success'}=${encodeURIComponent(successMessage)}`;
     console.log('Redirecting to success page:', redirectUrl);
     console.log('=== TikTok OAuth Callback Completed ===');
     
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
     console.error('Error details:', error);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
-    const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL}/settings/social-media?error=${encodeURIComponent(
+    const redirectUrl = `${APP_CONFIG.APP_URL}/settings/social-media?error=${encodeURIComponent(
       `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
     )}`;
     console.log('Redirecting to error page:', redirectUrl);

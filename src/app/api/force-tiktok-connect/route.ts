@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { APP_CONFIG } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     const testState = 'test_state_' + Date.now();
     
     // Redirect to our callback with test parameters
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/tiktok/callback?code=${testCode}&state=${testState}`;
+    const callbackUrl = `${APP_CONFIG.APP_URL}/api/auth/tiktok/callback?code=${testCode}&state=${testState}`;
     
     console.log('Redirecting to callback URL:', callbackUrl);
     
