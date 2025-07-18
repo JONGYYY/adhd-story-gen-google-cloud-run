@@ -599,10 +599,10 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
             )
             
             final_video.write_videofile(
-                output_path,
-                fps=30,
-                codec='libx264',
-                audio_codec='aac',
+            output_path,
+            fps=30,
+            codec='libx264',
+            audio_codec='aac',
                 audio_bitrate='192k',
                 bitrate='8000k',
                 temp_audiofile='temp-audio.m4a',
