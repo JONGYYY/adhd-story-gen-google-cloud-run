@@ -56,6 +56,97 @@ function formatTimeForSrt(seconds: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${milliseconds.toString().padStart(3, '0')}`;
 }
 
+// Helper function to create a simple HTML video player with audio and subtitles
+function createVideoHTML(audioUrl: string, subtitlesContent: string, title: string): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .video-container {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        .title {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .audio-player {
+            width: 100%;
+            margin-bottom: 30px;
+        }
+        .subtitles {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            color: white;
+            font-size: 16px;
+            line-height: 1.6;
+            text-align: left;
+        }
+        .subtitle-line {
+            margin-bottom: 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .download-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .download-link:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <div class="title">${title}</div>
+        <audio controls class="audio-player">
+            <source src="${audioUrl}" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        <div class="subtitles">
+            <div class="subtitle-line">🎧 Play the audio above to hear the story</div>
+            <div class="subtitle-line">📝 Subtitles will be displayed here when we add video support</div>
+        </div>
+        <a href="${audioUrl}" download class="download-link">Download Audio</a>
+    </div>
+</body>
+</html>
+  `;
+}
+
 export async function generateVideo(
   options: VideoGenerationOptions,
   videoId: string
@@ -64,7 +155,7 @@ export async function generateVideo(
     const tmpDir = getTmpDir();
     await fs.mkdir(tmpDir, { recursive: true });
     
-    console.log('Starting simple video generation...');
+    console.log('Starting enhanced audio generation with preview...');
     console.log('Environment:', process.env.VERCEL ? 'Vercel' : 'Local');
     console.log('Temp directory:', tmpDir);
     
@@ -143,13 +234,19 @@ export async function generateVideo(
 
     await updateProgress(videoId, 80);
 
-    // 5. Create a simple "video" file (actually just the audio for now)
-    // Since we can't use ffmpeg reliably, we'll create a simple response
-    const outputFilename = `output_${videoId}.mp3`; // Changed to mp3 for now
-    const outputPath = path.join(tmpDir, outputFilename);
+    // 5. Create an HTML video player with the audio and subtitles
+    const audioFilename = `audio_${videoId}.mp3`;
+    const audioPath = path.join(tmpDir, audioFilename);
+    const htmlFilename = `video_${videoId}.html`;
+    const htmlPath = path.join(tmpDir, htmlFilename);
     
-    // Copy the combined audio as our "video" output
-    await fs.copyFile(combinedAudioPath, outputPath);
+    // Copy the combined audio as our audio file
+    await fs.copyFile(combinedAudioPath, audioPath);
+    
+    // Create HTML video player
+    const audioUrl = `/api/videos/${audioFilename}`;
+    const htmlContent = createVideoHTML(audioUrl, combinedSubs, story.title);
+    await fs.writeFile(htmlPath, htmlContent);
     
     await updateProgress(videoId, 90);
 
@@ -159,15 +256,15 @@ export async function generateVideo(
     await fs.unlink(combinedAudioPath).catch(() => {});
     await fs.unlink(subtitlePath).catch(() => {});
 
-    // Set the video URL
-    const videoUrl = `/api/videos/${outputFilename}`;
+    // Set the video URL (pointing to the HTML player)
+    const videoUrl = `/api/videos/${htmlFilename}`;
     await setVideoReady(videoId, videoUrl);
     await updateProgress(videoId, 100);
 
-    console.log('Simple video generation completed successfully');
+    console.log('Enhanced audio generation with preview completed successfully');
     return videoUrl;
   } catch (error) {
-    console.error('Error in simple video generation:', error);
+    console.error('Error in enhanced audio generation:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     await setVideoFailed(videoId, errorMessage);
     throw error;
