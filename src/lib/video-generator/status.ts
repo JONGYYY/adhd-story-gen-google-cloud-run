@@ -1,75 +1,73 @@
-import { VideoStatus } from './types';
-import { promises as fs } from 'fs';
 import path from 'path';
+import fs from 'fs/promises';
+import os from 'os';
 
-const STATUS_DIR = path.join(process.cwd(), 'tmp', 'status');
+// Helper function to get the appropriate tmp directory
+function getTmpDir(): string {
+  // Use /tmp for Vercel, os.tmpdir() for local development
+  return process.env.VERCEL ? '/tmp' : os.tmpdir();
+}
 
-// Ensure status directory exists
+const STATUS_DIR = path.join(getTmpDir(), 'status');
+
+// Create status directory if it doesn't exist
 async function ensureStatusDir() {
   await fs.mkdir(STATUS_DIR, { recursive: true });
 }
 
-// Get status file path
-function getStatusPath(videoId: string): string {
-  return path.join(STATUS_DIR, `${videoId}.json`);
-}
-
-export async function createVideoStatus(videoId: string): Promise<void> {
+export async function createVideoStatus(videoId: string) {
   await ensureStatusDir();
-  const status: VideoStatus = {
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  await fs.writeFile(statusFile, JSON.stringify({
     status: 'generating',
     progress: 0,
-  };
-  await fs.writeFile(
-    getStatusPath(videoId),
-    JSON.stringify(status, null, 2)
-  );
+    createdAt: Date.now()
+  }));
 }
 
-export async function updateVideoStatus(
-  videoId: string,
-  update: Partial<VideoStatus>
-): Promise<void> {
-  try {
-    const currentStatus = await getVideoStatus(videoId);
-    const newStatus = { ...currentStatus, ...update };
-    await fs.writeFile(
-      getStatusPath(videoId),
-      JSON.stringify(newStatus, null, 2)
-    );
-  } catch (error) {
-    console.error(`Failed to update status for video ${videoId}:`, error);
-  }
+export async function updateProgress(videoId: string, progress: number) {
+  await ensureStatusDir();
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  const status = await getVideoStatus(videoId);
+  await fs.writeFile(statusFile, JSON.stringify({
+    ...status,
+    progress
+  }));
 }
 
-export async function getVideoStatus(videoId: string): Promise<VideoStatus> {
-  try {
-    const statusPath = getStatusPath(videoId);
-    const statusJson = await fs.readFile(statusPath, 'utf-8');
-    return JSON.parse(statusJson);
-  } catch (error) {
-    throw new Error('Video status not found');
-  }
-}
-
-export async function setVideoReady(videoId: string, videoUrl: string): Promise<void> {
-  await updateVideoStatus(videoId, {
+export async function setVideoReady(videoId: string, videoUrl: string) {
+  await ensureStatusDir();
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  await fs.writeFile(statusFile, JSON.stringify({
     status: 'ready',
     progress: 100,
     videoUrl,
-  });
+    completedAt: Date.now()
+  }));
 }
 
-export async function setVideoFailed(videoId: string, error: string): Promise<void> {
-  await updateVideoStatus(videoId, {
+export async function setVideoFailed(videoId: string, error: string) {
+  await ensureStatusDir();
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  await fs.writeFile(statusFile, JSON.stringify({
     status: 'failed',
     error,
-  });
+    failedAt: Date.now()
+  }));
 }
 
-// Helper function to update progress
-export async function updateProgress(videoId: string, progress: number): Promise<void> {
-  await updateVideoStatus(videoId, { progress });
+export async function getVideoStatus(videoId: string) {
+  await ensureStatusDir();
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  try {
+    const data = await fs.readFile(statusFile, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return { status: 'not_found' };
+    }
+    throw error;
+  }
 }
 
 // Clean up old status files (older than 24 hours)

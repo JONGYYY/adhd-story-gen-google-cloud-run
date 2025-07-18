@@ -5,8 +5,15 @@ import path from 'path';
 import fs from 'fs/promises';
 import { join } from 'path';
 import { readdirSync } from 'fs';
+import os from 'os';
 
 const execAsync = promisify(exec);
+
+// Helper function to get the appropriate tmp directory
+function getTmpDir(): string {
+  // Use /tmp for Vercel, os.tmpdir() for local development
+  return process.env.VERCEL ? '/tmp' : os.tmpdir();
+}
 
 async function getVideosInDirectory(directory: string): Promise<string[]> {
   try {
@@ -148,7 +155,7 @@ export async function selectBackgroundClips(
 
 export async function processBackgroundClip(clip: VideoClip): Promise<string> {
   try {
-    const tmpDir = path.join(process.cwd(), 'tmp');
+    const tmpDir = getTmpDir();
     await fs.mkdir(tmpDir, { recursive: true });
     
     const metadata = await getVideoMetadata(clip.path);

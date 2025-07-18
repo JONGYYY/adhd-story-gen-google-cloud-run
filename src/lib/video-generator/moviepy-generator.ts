@@ -8,12 +8,19 @@ import path from 'path';
 import fs from 'fs/promises';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import os from 'os';
 
 const execAsync = promisify(exec);
 
 // Helper function to convert ArrayBuffer to Buffer
 function arrayBufferToBuffer(arrayBuffer: ArrayBuffer): Buffer {
   return Buffer.from(new Uint8Array(arrayBuffer));
+}
+
+// Helper function to get the appropriate tmp directory
+function getTmpDir(): string {
+  // Use /tmp for Vercel, os.tmpdir() for local development
+  return process.env.VERCEL ? '/tmp' : os.tmpdir();
 }
 
 // Helper function to run Python script
@@ -51,7 +58,7 @@ async function runPythonScript(scriptPath: string, args: string[]): Promise<void
 }
 
 async function saveBannerToFile(bannerBuffer: Buffer, videoId: string): Promise<string> {
-  const tmpDir = path.join(process.cwd(), 'tmp');
+  const tmpDir = getTmpDir();
   await fs.mkdir(tmpDir, { recursive: true });
   const bannerPath = path.join(tmpDir, `banner_${videoId}.png`);
   await fs.writeFile(bannerPath, bannerBuffer);
@@ -64,9 +71,15 @@ export async function generateVideo(
 ): Promise<string> {
   try {
     // Create necessary directories
-    const tmpDir = path.join(process.cwd(), 'tmp');
+    const tmpDir = getTmpDir();
     const publicVideosDir = path.join(process.cwd(), 'public', 'videos');
     const pythonScriptsDir = path.join(process.cwd(), 'src', 'python');
+    
+    console.log('Creating directories:', {
+      tmpDir,
+      publicVideosDir,
+      pythonScriptsDir
+    });
     
     await fs.mkdir(tmpDir, { recursive: true });
     await fs.mkdir(publicVideosDir, { recursive: true });

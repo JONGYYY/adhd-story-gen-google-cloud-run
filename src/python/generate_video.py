@@ -22,6 +22,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def get_temp_dir():
+    """Get the appropriate temporary directory."""
+    if os.environ.get('VERCEL'):
+        # Use /tmp on Vercel
+        temp_dir = '/tmp'
+        os.makedirs(temp_dir, exist_ok=True)
+        return temp_dir
+    else:
+        # Use system temp directory locally
+        return tempfile.gettempdir()
+
 def validate_story_data(story_data):
     """Validate the story data structure."""
     try:
@@ -122,6 +133,8 @@ def create_profile_image(size):
 
 def load_reddit_logo(size):
     """Load and process the Reddit logo image."""
+    temp_dir = get_temp_dir()
+    
     # Define the SVG data for the Reddit logo
     svg_data = '''
     <svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -134,20 +147,24 @@ def load_reddit_logo(size):
     '''.format(size=size)
     
     # Save SVG to a temporary file
-    temp_svg = 'temp_reddit_logo.svg'
+    temp_svg = os.path.join(temp_dir, f'reddit_logo_{size}.svg')
+    temp_png = os.path.join(temp_dir, f'reddit_logo_{size}.png')
+    
     with open(temp_svg, 'w') as f:
         f.write(svg_data)
     
     # Convert SVG to PNG using ImageMagick
-    temp_png = 'temp_reddit_logo.png'
     os.system(f'convert {temp_svg} {temp_png}')
     
     # Load the PNG
     img = Image.open(temp_png)
     
     # Clean up temporary files
-    os.remove(temp_svg)
-    os.remove(temp_png)
+    try:
+        os.remove(temp_svg)
+        os.remove(temp_png)
+    except:
+        pass  # Ignore cleanup errors
     
     return np.array(img)
 
@@ -330,44 +347,45 @@ def enhance_audio(y, sr):
         return y
 
 def process_audio_with_speed(audio_path, speed, output_path):
-    """Process audio with speed change while maintaining quality."""
+    """Process audio file with the given speed multiplier."""
     try:
-        # Load audio
-        y, sr = librosa.load(audio_path, sr=None)
+        temp_dir = get_temp_dir()
+        temp_wav = os.path.join(temp_dir, f'temp_{os.path.basename(audio_path)}.wav')
         
-        # Enhance audio first
-        y = enhance_audio(y, sr)
+        # Convert to WAV if needed
+        if not audio_path.lower().endswith('.wav'):
+            y, sr = librosa.load(audio_path)
+            sf.write(temp_wav, y, sr)
+        else:
+            shutil.copy2(audio_path, temp_wav)
         
+        # Process the audio
+        y, sr = librosa.load(temp_wav)
+        
+        # Speed up the audio
         if speed != 1.0:
-            # Time stretch with better quality settings
-            y_fast = librosa.effects.time_stretch(
-                y,
-                rate=speed,
-                # Use better quality settings
-                n_fft=2048,
-                hop_length=512
-            )
+            y_fast = librosa.effects.time_stretch(y, rate=speed)
         else:
             y_fast = y
         
-        # Save with high quality settings
-        sf.write(
-            output_path,
-            y_fast,
-            sr,
-            format='wav',  # Use WAV format instead of MP3
-            subtype='PCM_24'  # Use high quality PCM
-        )
+        # Save the processed audio
+        sf.write(output_path, y_fast, sr)
+        
+        # Cleanup
+        try:
+            os.remove(temp_wav)
+        except:
+            pass  # Ignore cleanup errors
         
         return output_path
     except Exception as e:
-        logger.error(f"Failed to process audio: {e}")
+        logger.error(f"Error processing audio: {e}")
         raise
 
 def convert_audio_to_wav(audio_path):
     """Convert audio to WAV format for Whisper processing."""
     try:
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = get_temp_dir()
         wav_path = os.path.join(temp_dir, 'temp.wav')
         
         # Load and export as WAV
@@ -474,32 +492,37 @@ async def create_video(story_data, background_options, voice_options):
         print(f"Error in create_video: {str(e)}")
         raise e
 
-def main(video_id, opening_audio_path, story_audio_path, background_path, banner_path, output_path, story_data):
+def main(video_id, opening_audio_path, story_audio_path, background_path, banner_path, output_path, story_json, playback_speed):
     temp_dirs = []
     temp_files = []  # Track temporary files for cleanup
     try:
         logger.info("Starting video generation...")
         
-        # Validate input files
-        validate_files(opening_audio_path, story_audio_path, background_path)
+        # Create temp directory
+        temp_dir = get_temp_dir()
+        os.makedirs(temp_dir, exist_ok=True)
+        logger.info(f"Using temp directory: {temp_dir}")
+        
+        # Parse story data
+        story_data = json.loads(story_json)
+        
+        # Validate inputs
         validate_story_data(story_data)
+        validate_files(opening_audio_path, story_audio_path, background_path, banner_path)
         
-        # Create temp directory for processed files
-        tmp_dir = tempfile.mkdtemp()
-        temp_dirs.append(tmp_dir)
+        # Convert playback_speed to float
+        speed = float(playback_speed)
         
-        # Load and prepare background video
-        background = VideoFileClip(background_path)
+        # Process audio files with speed adjustment
+        temp_opening_audio = os.path.join(temp_dir, f'opening_{video_id}.wav')
+        temp_story_audio = os.path.join(temp_dir, f'story_{video_id}.wav')
         
-        # Resize to 9:16 aspect ratio
-        target_width = 1080
-        target_height = 1920
-        background = background.resize(height=target_height)
-        background = background.crop(x1=(background.w - target_width) // 2, width=target_width)
+        process_audio_with_speed(opening_audio_path, speed, temp_opening_audio)
+        process_audio_with_speed(story_audio_path, speed, temp_story_audio)
         
-        # Load audio files
-        opening_audio = AudioFileClip(opening_audio_path)
-        story_audio = AudioFileClip(story_audio_path)
+        # Load audio clips
+        opening_audio = AudioFileClip(temp_opening_audio)
+        story_audio = AudioFileClip(temp_story_audio)
         
         # Normalize audio levels
         opening_audio = normalize_audio(opening_audio)
