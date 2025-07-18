@@ -8,7 +8,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-import { generateVideo as generateMoviePyVideo } from './moviepy-generator';
+import { generateVideo as generateNodeVideo } from './node-generator';
 
 const execAsync = promisify(exec);
 
@@ -27,7 +27,7 @@ function splitIntoSegments(text: string): string[] {
     .filter(segment => segment.length > 0);
 }
 
-export { generateVideo as generateMoviePyVideo } from './moviepy-generator';
+export { generateVideo as generateNodeVideo } from './node-generator';
 
 export async function generateVideo(options: VideoOptions, videoId: string): Promise<string> {
   // Generate or use custom story
@@ -52,5 +52,5 @@ export async function generateVideo(options: VideoOptions, videoId: string): Pro
     story,
   };
 
-  return generateMoviePyVideo(generationOptions, videoId);
+  return generateNodeVideo(generationOptions, videoId);
 } 
