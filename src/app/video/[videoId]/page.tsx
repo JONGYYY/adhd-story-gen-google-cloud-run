@@ -18,6 +18,8 @@ export default function VideoPage() {
   const [videoStatus, setVideoStatus] = useState<VideoStatus>({ status: 'generating' });
   const [videoError, setVideoError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const checkStatusTimeoutRef = useRef<NodeJS.Timeout>();
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -107,6 +109,51 @@ export default function VideoPage() {
     }
   };
 
+  const handleTikTokUpload = async () => {
+    if (!videoStatus.videoUrl) return;
+    
+    setIsUploading(true);
+    setUploadError(null);
+    
+    try {
+      // Get the video file
+      const videoResponse = await fetch(videoStatus.videoUrl);
+      if (!videoResponse.ok) throw new Error('Failed to fetch video');
+      const videoBlob = await videoResponse.blob();
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('video', videoBlob, `video_${videoId}.mp4`);
+      formData.append('title', `Story Video #${videoId}`);
+      formData.append('privacy_level', 'SELF_ONLY'); // Start with private for safety
+      
+      // Upload to TikTok
+      const uploadResponse = await fetch('/api/social-media/tiktok/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!uploadResponse.ok) {
+        const error = await uploadResponse.text();
+        throw new Error(error || 'Failed to upload to TikTok');
+      }
+      
+      const result = await uploadResponse.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed');
+      }
+      
+      // Show success message
+      alert('Video uploaded to TikTok successfully! Check your TikTok drafts.');
+      
+    } catch (error) {
+      console.error('TikTok upload error:', error);
+      setUploadError(error instanceof Error ? error.message : 'Failed to upload to TikTok');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <PageContainer>
       <div className="bg-gray-800 border-b border-gray-700 w-full">
@@ -160,6 +207,12 @@ export default function VideoPage() {
                   )}
                 </div>
 
+                {uploadError && (
+                  <div className="text-red-400 mb-4">
+                    {uploadError}
+                  </div>
+                )}
+
                 <div className="flex justify-center gap-4">
                   <Button
                     onClick={handleDownload}
@@ -167,6 +220,20 @@ export default function VideoPage() {
                     disabled={!!videoError}
                   >
                     Download Video
+                  </Button>
+                  <Button
+                    onClick={handleTikTokUpload}
+                    className="px-6"
+                    disabled={!!videoError || isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <span className="animate-spin mr-2">⚙️</span>
+                        Uploading to TikTok...
+                      </>
+                    ) : (
+                      'Upload to TikTok'
+                    )}
                   </Button>
                   <Button
                     onClick={() => window.location.href = '/create'}
