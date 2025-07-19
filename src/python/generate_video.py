@@ -488,8 +488,21 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         background = background.resize(height=target_height)
         background = background.crop(x1=(background.w - target_width) // 2, width=target_width)
         
-        # Create simple opening segment without banner for now
-        opening_segment = background.subclip(0, opening_audio.duration).set_audio(opening_audio)
+        # Create opening segment with Reddit banner
+        opening_background = background.subclip(0, opening_audio.duration)
+        
+        # Create Reddit banner for the opening
+        reddit_banner = create_reddit_banner(
+            text=story_data['title'],
+            username=story_data.get('author', 'Anonymous'),
+            size=(target_width, target_height)
+        ).set_duration(opening_audio.duration)
+        
+        # Composite opening segment with banner and audio
+        opening_segment = CompositeVideoClip(
+            [opening_background, reddit_banner],
+            size=(target_width, target_height)
+        ).set_audio(opening_audio)
         
         # Generate captions for story
         story_wav_path, temp_wav_file = convert_audio_to_wav(story_audio_path)
