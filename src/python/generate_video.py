@@ -418,7 +418,7 @@ def convert_audio_to_wav(audio_path):
         audio.write_audiofile(wav_path, fps=16000, nbytes=2, codec='pcm_s16le')
         audio.close()
         
-        return wav_path, temp_dir
+        return wav_path, wav_path  # Return the WAV file path instead of temp_dir
     except Exception as e:
         logger.error(f"Failed to convert audio to WAV: {e}")
         raise
@@ -492,8 +492,8 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         opening_segment = background.subclip(0, opening_audio.duration).set_audio(opening_audio)
         
         # Generate captions for story
-        story_wav_path, temp_wav_dir = convert_audio_to_wav(story_audio_path)
-        temp_dirs.append(temp_wav_dir)
+        story_wav_path, temp_wav_file = convert_audio_to_wav(story_audio_path)
+        temp_files.append(temp_wav_file)
         
         try:
             words = get_word_timestamps(story_wav_path)
