@@ -3,7 +3,7 @@
     "src/app/api/*/route.ts": {
       "maxDuration": 300
     },
-    "api/generate-video-python.py": {
+    "api/python/generate-video/index.py": {
       "runtime": "@vercel/python@3.1.0",
       "maxDuration": 300
     }
@@ -12,6 +12,5 @@
     "env": {
       "PYTHON_VERSION": "3.11"
     }
-  },
-  "installCommand": "cd api && python3 -m pip install -r requirements.txt"
+  }
 } 
