@@ -26,13 +26,13 @@ async function testPythonAvailability(): Promise<boolean> {
     return new Promise((resolve) => {
       const pythonProcess = spawn('python3', ['--version']);
       
-      pythonProcess.on('close', (code) => {
+      pythonProcess.on('close', (code: number | null) => {
         const available = code === 0;
         console.log(`Python availability check: ${available ? 'available' : 'not available'}`);
         resolve(available);
       });
       
-      pythonProcess.on('error', (error) => {
+      pythonProcess.on('error', (error: Error) => {
         console.log('Python not available:', error.message);
         resolve(false);
       });
