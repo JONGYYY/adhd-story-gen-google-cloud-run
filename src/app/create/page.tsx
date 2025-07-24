@@ -266,8 +266,7 @@ export default function Create() {
         customStory: storyData,
       };
 
-      console.log('Sending video generation request with options:', JSON.stringify(options, null, 2));
-
+      console.log('Sending video generation request...');
       const response = await fetch('/api/generate-video', {
         method: 'POST',
         headers: {
@@ -276,27 +275,52 @@ export default function Create() {
         body: JSON.stringify(options),
       });
 
+      console.log('Response received:', response.status, response.statusText);
+
       if (!response.ok) {
         const error = await response.text();
-        console.error('Video generation failed:', error);
-        setError(`Video generation failed: ${error}`);
+        console.error('Video generation failed:', response.status, error);
+        setError(`Video generation failed (${response.status}): ${error}`);
         return;
       }
 
       const data = await response.json();
+      console.log('Response data:', data);
+      
       if (!data.success || !data.videoId) {
-        throw new Error('Invalid response from server');
+        console.error('Invalid server response:', data);
+        throw new Error(`Invalid response from server: ${JSON.stringify(data)}`);
       }
 
+      console.log('Starting to poll for video status with ID:', data.videoId);
+
       // Start polling for video status
+      let pollCount = 0;
+      const maxPolls = 150; // 5 minutes timeout (150 * 2 seconds)
+      
       const pollInterval = setInterval(async () => {
         try {
+          pollCount++;
+          
+          // Timeout after 5 minutes
+          if (pollCount > maxPolls) {
+            clearInterval(pollInterval);
+            setError('Video generation timed out. This might be due to high server load. Please try again.');
+            setIsGenerating(false);
+            setProgress(0);
+            return;
+          }
+
+          console.log(`Polling video status (attempt ${pollCount}/${maxPolls})`);
           const statusResponse = await fetch(`/api/video-status/${data.videoId}`);
+          
           if (!statusResponse.ok) {
-            throw new Error('Failed to get video status');
+            console.error('Status response not ok:', statusResponse.status, statusResponse.statusText);
+            throw new Error(`Failed to get video status: ${statusResponse.status}`);
           }
 
           const statusData = await statusResponse.json();
+          console.log('Status data received:', statusData);
           
           // Update progress
           if (statusData.progress) {
@@ -311,11 +335,19 @@ export default function Create() {
             setError(`Video generation failed: ${statusData.error || 'Unknown error'}`);
             setIsGenerating(false);
             setProgress(0);
+          } else if (statusData.status === 'not_found') {
+            // If status is not found after some time, it might indicate an issue
+            if (pollCount > 10) { // After 20 seconds
+              clearInterval(pollInterval);
+              setError('Video generation status lost. This might be a server issue. Please try again.');
+              setIsGenerating(false);
+              setProgress(0);
+            }
           }
         } catch (error) {
           console.error('Failed to poll video status:', error);
           clearInterval(pollInterval);
-          setError('Failed to check video status. Please try again.');
+          setError(`Failed to check video status: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
           setIsGenerating(false);
           setProgress(0);
         }
@@ -410,13 +442,6 @@ export default function Create() {
                 </button>
               </div>
             </div>
-
-            {/* Show error if any */}
-            {error && (
-              <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
-                {error}
-              </div>
-            )}
 
             {/* Story Content */}
             {(storySource === 'reddit' || storySource === 'ai') && (
@@ -699,6 +724,13 @@ export default function Create() {
                 'Generate Video'
               )}
             </Button>
+
+            {/* Show error if any - moved below button */}
+            {error && (
+              <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200">
+                {error}
+              </div>
+            )}
 
             {/* Generation Progress */}
             {isGenerating && (
