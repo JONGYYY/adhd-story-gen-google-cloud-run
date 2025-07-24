@@ -5,4 +5,5 @@ soundfile==0.12.1
 opencv-python==4.11.0.86
 pillow==10.2.0
 numpy==1.26.4
-torch==2.7.1 
+torch==2.7.1
+werkzeug==1.0.1 
