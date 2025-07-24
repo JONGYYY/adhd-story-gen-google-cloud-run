@@ -99,7 +99,9 @@ export async function generateStory({ subreddit, isCliffhanger, narratorGender }
     // Validate title word count for test subreddit
     if (subreddit === 'r/test') {
       const titleWords = story.title.split(/\s+/).length;
-      const storyWords = story.story.split(/\s+/).length;
+      // For story word count, exclude the [BREAK] tag from counting
+      const storyWithoutBreak = story.story.replace(/\[BREAK\]/g, '').trim();
+      const storyWords = storyWithoutBreak.split(/\s+/).filter(word => word.length > 0).length;
       
       if (titleWords > 6) {
         console.error('Invalid test story format - title must be 6 words or less:', story.title);
