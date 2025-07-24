@@ -4,7 +4,7 @@
       "maxDuration": 300
     },
     "api/generate-video-python.py": {
-      "runtime": "@vercel/python@3.1.0",
+      "runtime": "@vercel/python",
       "maxDuration": 300
     }
   },
@@ -12,6 +12,5 @@
     "env": {
       "PYTHON_VERSION": "3.11"
     }
-  },
-  "installCommand": "python3.11 -m pip install --upgrade pip && pip install -r api/requirements.txt"
+  }
 } 
