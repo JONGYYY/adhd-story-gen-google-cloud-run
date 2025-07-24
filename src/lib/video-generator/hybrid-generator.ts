@@ -13,20 +13,37 @@ async function testPythonAvailability(): Promise<boolean> {
   try {
     console.log('Testing Python video generation availability...');
     
-    // Test the Python function
-    const response = await fetch('/api/generate-video-python', {
-      method: 'GET',
-    });
-    
-    if (!response.ok) {
-      console.log('Python function not available:', response.status);
+    // On Vercel, Python is not available
+    if (process.env.VERCEL) {
+      console.log('Running on Vercel - Python not available');
       return false;
     }
     
-    const data = await response.json();
-    console.log('Python function response:', data);
+    // On localhost, try to use Python directly
+    console.log('Running on localhost - checking for Python');
+    const { spawn } = require('child_process');
     
-    return data.success && data.dependencies_available;
+    return new Promise((resolve) => {
+      const pythonProcess = spawn('python3', ['--version']);
+      
+      pythonProcess.on('close', (code) => {
+        const available = code === 0;
+        console.log(`Python availability check: ${available ? 'available' : 'not available'}`);
+        resolve(available);
+      });
+      
+      pythonProcess.on('error', (error) => {
+        console.log('Python not available:', error.message);
+        resolve(false);
+      });
+      
+      // Timeout after 2 seconds
+      setTimeout(() => {
+        pythonProcess.kill();
+        console.log('Python check timed out');
+        resolve(false);
+      }, 2000);
+    });
   } catch (error) {
     console.error('Error testing Python availability:', error);
     return false;
