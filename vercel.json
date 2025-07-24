@@ -12,5 +12,6 @@
     "env": {
       "PYTHON_VERSION": "3.11"
     }
-  }
+  },
+  "installCommand": "python3.11 -m pip install --upgrade pip && pip install -r api/requirements.txt"
 } 
