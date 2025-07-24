@@ -2,17 +2,11 @@
   "functions": {
     "src/app/api/*/route.ts": {
       "maxDuration": 300
-    },
-    "api/python/generate-video/index.py": {
-      "runtime": "@vercel/python@3.1.0",
-      "maxDuration": 300,
-      "excludeFiles": "!(api/python/generate-video/**)",
-      "includeFiles": "api/python/generate-video/**"
     }
   },
   "build": {
     "env": {
-      "PYTHON_VERSION": "3.11"
+      "NODE_ENV": "production"
     }
   }
 } 
