@@ -1,2 +1,4 @@
 moviepy==1.0.3
-werkzeug==1.0.1 
+numpy==1.26.4
+pillow==10.2.0
+opencv-python==4.11.0.86 
