@@ -19,12 +19,16 @@ async function testPythonAvailability(): Promise<boolean> {
       return false;
     }
     
-    // On localhost, try to use Python directly
+    // On localhost, try to use the venv Python and test for whisper module
     console.log('Running on localhost - checking for Python');
     const { spawn } = require('child_process');
     
+    // Use the same Python path as moviepy-generator
+    const pythonPath = path.join(process.cwd(), 'venv', 'bin', 'python3');
+    
     return new Promise((resolve) => {
-      const pythonProcess = spawn('python3', ['--version']);
+      // Test if Python exists and has whisper module
+      const pythonProcess = spawn(pythonPath, ['-c', 'import whisper; print("whisper available")']);
       
       pythonProcess.on('close', (code: number | null) => {
         const available = code === 0;
@@ -37,12 +41,12 @@ async function testPythonAvailability(): Promise<boolean> {
         resolve(false);
       });
       
-      // Timeout after 2 seconds
+      // Timeout after 5 seconds
       setTimeout(() => {
         pythonProcess.kill();
         console.log('Python check timed out');
         resolve(false);
-      }, 2000);
+      }, 5000);
     });
   } catch (error) {
     console.error('Error testing Python availability:', error);
