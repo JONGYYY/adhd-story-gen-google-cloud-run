@@ -27,27 +27,45 @@ async function generateVideoOnRailway(options: VideoOptions, videoId: string, st
 
   console.log('Sending request to Railway API:', JSON.stringify(railwayRequest, null, 2));
 
-  const response = await fetch(`${RAILWAY_API_URL}/generate-video`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(railwayRequest),
-  });
+  try {
+    const response = await fetch(`${RAILWAY_API_URL}/generate-video`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(railwayRequest),
+      timeout: 30000, // 30 second timeout
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Railway API error: ${response.status} - ${errorText}`);
+    console.log('Railway API response status:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Railway API error response:', errorText);
+      throw new Error(`Railway API error: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Railway API response:', JSON.stringify(result, null, 2));
+
+    if (!result.success) {
+      console.error('Railway API returned unsuccessful response:', result);
+      throw new Error(result.error || 'Railway video generation failed');
+    }
+
+    if (!result.videoId) {
+      console.error('Railway API response missing videoId:', result);
+      throw new Error('Railway API response missing videoId');
+    }
+
+    console.log('Railway video generation started successfully with ID:', result.videoId);
+    return result.videoId; // Railway returns its own video ID
+  } catch (error) {
+    console.error('Error calling Railway API:', error);
+    // If Railway fails, fall back to local video ID and let the status API handle it
+    console.log('Railway API failed, falling back to local video ID:', videoId);
+    throw error;
   }
-
-  const result = await response.json();
-  console.log('Railway API response:', JSON.stringify(result, null, 2));
-
-  if (!result.success) {
-    throw new Error(result.error || 'Railway video generation failed');
-  }
-
-  return result.videoId; // Railway returns its own video ID
 }
 
 export async function POST(request: NextRequest) {
@@ -94,14 +112,26 @@ export async function POST(request: NextRequest) {
     if (process.env.VERCEL) {
       console.log('Running on Vercel - using Railway API for video generation');
       
-      const railwayVideoId = await generateVideoOnRailway(options, videoId, story);
-      
-      return NextResponse.json({
-        success: true,
-        videoId: railwayVideoId, // Use Railway's video ID
-        videoUrl: `/video/${railwayVideoId}`,
-        useRailway: true, // Flag to indicate Railway is being used
-      });
+      try {
+        const railwayVideoId = await generateVideoOnRailway(options, videoId, story);
+        
+        return NextResponse.json({
+          success: true,
+          videoId: railwayVideoId, // Use Railway's video ID
+          videoUrl: `/video/${railwayVideoId}`,
+          useRailway: true, // Flag to indicate Railway is being used
+        });
+      } catch (railwayError) {
+        console.error('Railway API failed:', railwayError);
+        // Return error instead of falling back to avoid confusion
+        return NextResponse.json(
+          { 
+            success: false,
+            error: `Video generation service unavailable: ${railwayError instanceof Error ? railwayError.message : 'Unknown error'}. Please try again.` 
+          },
+          { status: 503 }
+        );
+      }
     } else {
       console.log('Running locally - using local video generation');
       
