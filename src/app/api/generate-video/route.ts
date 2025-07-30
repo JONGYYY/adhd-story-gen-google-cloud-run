@@ -35,7 +35,6 @@ async function generateVideoOnRailway(options: VideoOptions, videoId: string, st
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(railwayRequest),
-      timeout: 30000, // 30 second timeout
     });
 
     console.log('Railway API response status:', response.status, response.statusText);
