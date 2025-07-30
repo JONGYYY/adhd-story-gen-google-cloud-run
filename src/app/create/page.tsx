@@ -329,6 +329,7 @@ export default function Create() {
           
           if (statusData.status === 'ready' && statusData.videoUrl) {
             clearInterval(pollInterval);
+            console.log('Video is ready, redirecting to:', `/video/${data.videoId}`);
             window.location.href = `/video/${data.videoId}`;
           } else if (statusData.status === 'failed') {
             clearInterval(pollInterval);
@@ -353,15 +354,11 @@ export default function Create() {
         }
       }, 2000); // Poll every 2 seconds
 
-      // Clean up interval on component unmount
-      return () => clearInterval(pollInterval);
-
     } catch (error) {
       console.error('Failed to generate video:', error);
       setError('Failed to generate video. Please try again.');
-      setProgress(0);
-    } finally {
       setIsGenerating(false);
+      setProgress(0);
     }
   };
 
