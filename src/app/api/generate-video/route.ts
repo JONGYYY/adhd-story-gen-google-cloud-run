@@ -8,15 +8,54 @@ import { createVideoStatus, setVideoReady, setVideoFailed } from '@/lib/video-ge
 // Prevent static generation but use Node.js runtime for video generation
 export const dynamic = 'force-dynamic';
 
+// Railway API configuration
+const RAILWAY_API_URL = 'https://adhd-story-gen-production.up.railway.app';
+
+async function generateVideoOnRailway(options: VideoOptions, videoId: string, story: SubredditStory) {
+  const railwayRequest = {
+    subreddit: story.subreddit,
+    isCliffhanger: options.isCliffhanger,
+    voice: options.voice,
+    background: options.background,
+    customStory: {
+      title: story.title,
+      story: story.story,
+      subreddit: story.subreddit,
+      author: story.author
+    }
+  };
+
+  console.log('Sending request to Railway API:', JSON.stringify(railwayRequest, null, 2));
+
+  const response = await fetch(`${RAILWAY_API_URL}/generate-video`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(railwayRequest),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Railway API error: ${response.status} - ${errorText}`);
+  }
+
+  const result = await response.json();
+  console.log('Railway API response:', JSON.stringify(result, null, 2));
+
+  if (!result.success) {
+    throw new Error(result.error || 'Railway video generation failed');
+  }
+
+  return result.videoId; // Railway returns its own video ID
+}
+
 export async function POST(request: NextRequest) {
   const videoId = uuidv4();
   
   try {
     const options: VideoOptions = await request.json();
     console.log('Received video generation request with options:', JSON.stringify(options, null, 2));
-
-    // Initialize video status
-    await createVideoStatus(videoId);
 
     // Generate or use custom story
     let story: SubredditStory;
@@ -51,30 +90,52 @@ export async function POST(request: NextRequest) {
       throw new Error('Story is missing required fields (title or story content)');
     }
 
-    // Start video generation
-    console.log('Starting video generation with story:', JSON.stringify(story, null, 2));
-    
-    const generationOptions: VideoGenerationOptions = {
-      ...options,
-      story,
-    };
-    
-    const outputPath = await generateVideo(generationOptions, videoId);
+    // Check if we're on Vercel - if so, use Railway API
+    if (process.env.VERCEL) {
+      console.log('Running on Vercel - using Railway API for video generation');
+      
+      const railwayVideoId = await generateVideoOnRailway(options, videoId, story);
+      
+      return NextResponse.json({
+        success: true,
+        videoId: railwayVideoId, // Use Railway's video ID
+        videoUrl: `/video/${railwayVideoId}`,
+        useRailway: true, // Flag to indicate Railway is being used
+      });
+    } else {
+      console.log('Running locally - using local video generation');
+      
+      // Initialize video status for local generation
+      await createVideoStatus(videoId);
 
-    // Update status to ready
-    await setVideoReady(videoId, outputPath);
+      // Start local video generation
+      console.log('Starting local video generation with story:', JSON.stringify(story, null, 2));
+      
+      const generationOptions: VideoGenerationOptions = {
+        ...options,
+        story,
+      };
+      
+      const outputPath = await generateVideo(generationOptions, videoId);
 
-    return NextResponse.json({
-      success: true,
-      videoId,
-      outputPath,
-    });
+      // Update status to ready
+      await setVideoReady(videoId, outputPath);
+
+      return NextResponse.json({
+        success: true,
+        videoId,
+        videoUrl: outputPath,
+        useRailway: false,
+      });
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to generate video';
     console.error('Error generating video:', error);
     
-    // Update status to failed
-    await setVideoFailed(videoId, errorMessage);
+    // Only update local status if not using Railway
+    if (!process.env.VERCEL) {
+      await setVideoFailed(videoId, errorMessage);
+    }
     
     return NextResponse.json(
       { error: errorMessage },
