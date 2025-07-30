@@ -267,44 +267,83 @@ export default function Create() {
       };
 
       console.log('Sending video generation request...');
-      const response = await fetch('/api/generate-video', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(options),
-      });
+      let response;
+      try {
+        response = await fetch('/api/generate-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(options),
+        });
+      } catch (fetchError) {
+        console.error('Network error during video generation request:', fetchError);
+        setError(`Network error: ${fetchError instanceof Error ? fetchError.message : 'Failed to connect to server'}. Please check your internet connection and try again.`);
+        setIsGenerating(false);
+        setProgress(0);
+        return;
+      }
 
       console.log('Response received:', response.status, response.statusText);
 
       if (!response.ok) {
-        const error = await response.text();
-        console.error('Video generation failed:', response.status, error);
-        setError(`Video generation failed (${response.status}): ${error}`);
+        let errorMessage;
+        try {
+          const errorText = await response.text();
+          console.error('Video generation failed:', response.status, errorText);
+          errorMessage = `Video generation failed (${response.status}): ${errorText}`;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `Video generation failed (${response.status}): ${response.statusText}`;
+        }
+        setError(errorMessage);
+        setIsGenerating(false);
+        setProgress(0);
         return;
       }
 
-      const data = await response.json();
-      console.log('Response data:', data);
+      let data;
+      try {
+        data = await response.json();
+        console.log('Response data:', JSON.stringify(data, null, 2));
+      } catch (parseError) {
+        console.error('Failed to parse response JSON:', parseError);
+        setError('Invalid response from server. Please try again.');
+        setIsGenerating(false);
+        setProgress(0);
+        return;
+      }
       
-      if (!data.success || !data.videoId) {
-        console.error('Invalid server response:', data);
-        throw new Error(`Invalid response from server: ${JSON.stringify(data)}`);
+      if (!data.success) {
+        console.error('Server returned unsuccessful response:', data);
+        setError(data.error || 'Video generation failed. Please try again.');
+        setIsGenerating(false);
+        setProgress(0);
+        return;
+      }
+      
+      if (!data.videoId) {
+        console.error('Invalid server response - missing videoId:', data);
+        setError('Invalid response from server: missing video ID. Please try again.');
+        setIsGenerating(false);
+        setProgress(0);
+        return;
       }
 
       console.log('Starting to poll for video status with ID:', data.videoId);
 
       // Start polling for video status
       let pollCount = 0;
-      const maxPolls = 150; // 5 minutes timeout (150 * 2 seconds)
+      const maxPolls = 300; // 10 minutes timeout (300 * 2 seconds)
       
       const pollInterval = setInterval(async () => {
         try {
           pollCount++;
           
-          // Timeout after 5 minutes
+          // Timeout after 10 minutes
           if (pollCount > maxPolls) {
             clearInterval(pollInterval);
+            console.error('Video generation timed out after', maxPolls * 2, 'seconds');
             setError('Video generation timed out. This might be due to high server load. Please try again.');
             setIsGenerating(false);
             setProgress(0);
@@ -312,47 +351,96 @@ export default function Create() {
           }
 
           console.log(`Polling video status (attempt ${pollCount}/${maxPolls})`);
-          const statusResponse = await fetch(`/api/video-status/${data.videoId}`);
+          
+          let statusResponse;
+          try {
+            statusResponse = await fetch(`/api/video-status/${data.videoId}`, {
+              method: 'GET',
+              cache: 'no-cache',
+              headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+              }
+            });
+          } catch (fetchError) {
+            console.error('Fetch error:', fetchError);
+            throw new Error(`Network error: ${fetchError instanceof Error ? fetchError.message : 'Unknown fetch error'}`);
+          }
           
           if (!statusResponse.ok) {
             console.error('Status response not ok:', statusResponse.status, statusResponse.statusText);
-            throw new Error(`Failed to get video status: ${statusResponse.status}`);
+            throw new Error(`Failed to get video status: ${statusResponse.status} ${statusResponse.statusText}`);
           }
 
           const statusData = await statusResponse.json();
-          console.log('Status data received:', statusData);
+          console.log('Status data received:', JSON.stringify(statusData, null, 2));
           
-          // Update progress
-          if (statusData.progress) {
+          // Always update progress if we have it
+          if (typeof statusData.progress === 'number') {
+            console.log('Updating progress from', progress, 'to', statusData.progress);
             setProgress(statusData.progress);
           }
           
-          if (statusData.status === 'ready' && statusData.videoUrl) {
+          // Handle different status cases
+          if (statusData.status === 'ready') {
+            console.log('✅ Video is ready!');
+            console.log('Video URL:', statusData.videoUrl);
+            console.log('Clearing interval and redirecting...');
             clearInterval(pollInterval);
-            console.log('Video is ready, redirecting to:', `/video/${data.videoId}`);
-            window.location.href = `/video/${data.videoId}`;
+            
+            // Add a small delay to ensure UI updates
+            setTimeout(() => {
+              console.log('Redirecting to:', `/video/${data.videoId}`);
+              window.location.href = `/video/${data.videoId}`;
+            }, 500);
+            
           } else if (statusData.status === 'failed') {
+            console.error('❌ Video generation failed:', statusData.error);
             clearInterval(pollInterval);
             setError(`Video generation failed: ${statusData.error || 'Unknown error'}`);
             setIsGenerating(false);
             setProgress(0);
+            
           } else if (statusData.status === 'not_found') {
+            console.warn('⚠️ Video status not found');
             // If status is not found after some time, it might indicate an issue
-            if (pollCount > 10) { // After 20 seconds
+            if (pollCount > 15) { // After 30 seconds
+              console.error('Video status lost after 30 seconds');
               clearInterval(pollInterval);
               setError('Video generation status lost. This might be a server issue. Please try again.');
               setIsGenerating(false);
               setProgress(0);
             }
+            
+          } else if (statusData.status === 'generating') {
+            console.log('🔄 Video still generating, progress:', statusData.progress);
+            // Continue polling
+            
+          } else {
+            console.warn('Unknown status:', statusData.status);
           }
+          
         } catch (error) {
-          console.error('Failed to poll video status:', error);
+          console.error('❌ Failed to poll video status:', error);
+          console.error('Error details:', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            pollCount,
+            videoId: data.videoId
+          });
+          
+          // Don't fail immediately on network errors, try a few more times
+          if (pollCount < 5) {
+            console.log('Retrying due to early error...');
+            return;
+          }
+          
           clearInterval(pollInterval);
           setError(`Failed to check video status: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
           setIsGenerating(false);
           setProgress(0);
         }
-      }, 2000); // Poll every 2 seconds
+      }, 1000); // Poll every 1 second (faster polling)
 
     } catch (error) {
       console.error('Failed to generate video:', error);
