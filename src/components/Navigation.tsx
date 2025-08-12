@@ -226,6 +226,9 @@ export function Navigation() {
                     <ListItem href="/create" title="Create Video">
                       Create AI-generated or Reddit-based videos
                     </ListItem>
+                    <ListItem href="/create/test" title="Test Generator">
+                      Simple test video generator
+                    </ListItem>
                     <ListItem href="/create/batch" title="Batch Creation">
                       Generate multiple videos at once
                     </ListItem>

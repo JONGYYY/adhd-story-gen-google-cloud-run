@@ -116,17 +116,66 @@ export async function generateVideo(
     await fs.writeFile(openingAudioPath, arrayBufferToBuffer(openingAudio));
     await fs.writeFile(storyAudioPath, arrayBufferToBuffer(storyAudio));
 
-    // 4. Generate banner (45%)
-    const bannerBuffer = await generateBanner({
-      title: story.title,
-      author: story.author || 'Anonymous',
-      subreddit: story.subreddit,
-      upvotes: 99,
-      comments: 99,
-      awards: ['Helpful', 'Wholesome', 'Silver']
+    // 4. Generate custom banner using user's images (45%)
+    console.log('🎨 Creating custom banner with user images...');
+    const bannerPath = path.join(tmpDir, `custom_banner_${videoId}.png`);
+    
+    const bannerScriptPath = path.join(process.cwd(), 'src', 'python', 'create_banner_from_images.py');
+    
+    // Use custom banner creation script instead of generateBanner
+    const pythonPath = process.env.VERCEL 
+      ? 'python3'  // Use system Python on Vercel
+      : path.join(process.cwd(), 'venv', 'bin', 'python3'); // Use venv locally
+    
+    await new Promise<void>((resolve, reject) => {
+      const pythonProcess = spawn(pythonPath, [
+        bannerScriptPath,
+        story.title,                    // title
+        story.subreddit || 'r/stories', // subreddit
+        story.author || 'Anonymous',    // author
+        bannerPath,                     // output path
+        "1080"                         // width
+      ]);
+      
+      let stdoutData = '';
+      let stderrData = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdoutData += data.toString();
+        console.log(`Banner Python stdout: ${data}`);
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderrData += data.toString();
+        console.log(`Banner Python stderr: ${data}`);
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log('✅ Custom banner created successfully');
+          resolve();
+        } else {
+          console.error('❌ Custom banner creation failed, creating fallback');
+          // Create a simple fallback banner
+          const fallbackPng = Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            'base64'
+          );
+          fs.writeFile(bannerPath, fallbackPng).then(() => resolve()).catch(reject);
+        }
+      });
+
+      pythonProcess.on('error', (err) => {
+        console.error('❌ Failed to start banner creation process:', err);
+        // Create fallback banner
+        const fallbackPng = Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          'base64'
+        );
+        fs.writeFile(bannerPath, fallbackPng).then(() => resolve()).catch(reject);
+      });
     });
-    const bannerPath = path.join(tmpDir, `banner_${videoId}.png`);
-    await fs.writeFile(bannerPath, bannerBuffer);
+    
     await updateProgress(videoId, 45);
 
     // 5. Select background video (60%)

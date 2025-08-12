@@ -491,18 +491,63 @@ def main(video_id, opening_audio_path, story_audio_path, background_path, banner
         # Create opening segment with Reddit banner
         opening_background = background.subclip(0, opening_audio.duration)
         
-        # Create Reddit banner for the opening
-        reddit_banner = create_reddit_banner(
-            text=story_data['title'],
-            username=story_data.get('author', 'Anonymous'),
-            size=(target_width, target_height)
-        ).set_duration(opening_audio.duration)
+        # Use the provided custom banner instead of generating one
+        if os.path.exists(banner_path):
+            logger.info(f"✅ USING CUSTOM BANNER: {banner_path}")
+            logger.info(f"✅ Banner file size: {os.path.getsize(banner_path)} bytes")
+            
+            # Load the banner image to get dimensions
+            from PIL import Image as PILImage
+            banner_img = PILImage.open(banner_path)
+            logger.info(f"✅ Custom banner loaded - size: {banner_img.size}, mode: {banner_img.mode}")
+            
+            # Use ImageClip directly with the RGBA banner image
+            reddit_banner = ImageClip(banner_path, duration=opening_audio.duration)
+            
+            # Log banner loading success
+            logger.info(f"✅ Banner ImageClip created successfully - testing basic visibility")
+            logger.info(f"✅ Banner will be overlaid on opening segment for {opening_audio.duration:.2f} seconds")
+            
+            # Make the banner VERY prominent - use 90% of video width
+            banner_width = int(target_width * 0.9)  # 90% of video width for maximum prominence
+            banner_height = int(banner_width * banner_img.height / banner_img.width)
+            
+            # Ensure banner doesn't exceed reasonable height (max 30% of video height)
+            max_banner_height = int(target_height * 0.3)
+            if banner_height > max_banner_height:
+                banner_height = max_banner_height
+                banner_width = int(banner_height * banner_img.width / banner_img.height)
+            
+            reddit_banner = reddit_banner.resize((banner_width, banner_height))
+            
+            # Position the banner in the CENTER of the ENTIRE video (both horizontally and vertically)
+            reddit_banner = reddit_banner.set_position('center')  # This centers both x and y
+            
+            logger.info(f"✅ CUSTOM BANNER CONFIGURED: {banner_width}x{banner_height} at position CENTER of entire video")
+            logger.info(f"✅ Banner will be visible for {opening_audio.duration:.2f} seconds")
+            logger.info("✅ Transparency handling enabled for banner")
+        else:
+            logger.warning(f"❌ CUSTOM BANNER NOT FOUND: {banner_path}")
+            logger.info("🔄 Using fallback generated banner")
+            # Fallback to generated banner
+            reddit_banner = create_reddit_banner(
+                text=story_data['title'],
+                username=story_data.get('author', 'Anonymous'),
+                size=(target_width, target_height)
+            ).set_duration(opening_audio.duration)
         
         # Composite opening segment with banner and audio
+        logger.info(f"✅ Compositing opening segment with background and banner")
+        logger.info(f"✅ Background clip: {opening_background.w}x{opening_background.h}, duration: {opening_background.duration:.2f}s")
+        logger.info(f"✅ Banner clip: {reddit_banner.w}x{reddit_banner.h}, duration: {reddit_banner.duration:.2f}s")
+        logger.info(f"✅ Banner position: {reddit_banner.pos}")
+        
         opening_segment = CompositeVideoClip(
             [opening_background, reddit_banner],
             size=(target_width, target_height)
         ).set_audio(opening_audio)
+        
+        logger.info(f"✅ Opening segment created: {opening_segment.w}x{opening_segment.h}, duration: {opening_segment.duration:.2f}s")
         
         # Generate captions for story
         story_wav_path, temp_wav_file = convert_audio_to_wav(story_audio_path)

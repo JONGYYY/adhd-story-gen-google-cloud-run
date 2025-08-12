@@ -25,6 +25,16 @@ export async function createVideoStatus(videoId: string) {
   }));
 }
 
+export async function setVideoGenerating(videoId: string) {
+  await ensureStatusDir();
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  await fs.writeFile(statusFile, JSON.stringify({
+    status: 'generating',
+    progress: 0,
+    createdAt: Date.now()
+  }));
+}
+
 export async function updateProgress(videoId: string, progress: number) {
   await ensureStatusDir();
   const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
