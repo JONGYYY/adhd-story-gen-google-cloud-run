@@ -1,0 +1,27 @@
+# Ignore Python files and directories
+*.py
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+api/
+src/python/
+
+# Ignore Python dependency files
+*requirements*.txt
+*runtime*.txt
+.python-version
+
+# Ignore Next.js files (we only want the Express backend)
+.next/
+src/
+packages/
+apps/
+
+# Only use our Railway-specific files
+!railway-backend.js
+!railway-package.json
+!nixpacks.toml
+!railway.json 
