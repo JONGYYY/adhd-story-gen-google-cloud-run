@@ -1,4 +1,5 @@
 const webpack = require('webpack');
+const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -11,6 +12,12 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer }) => {
+    // Add explicit alias resolution
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': path.resolve(__dirname, 'src'),
+    };
+
     if (!isServer) {
       // Ensure these packages are treated as external on the client side
       config.resolve.fallback = {
