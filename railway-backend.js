@@ -80,7 +80,7 @@ app.get('/video-status/:videoId', async (req, res) => {
     const { videoId } = req.params;
     
     // Import status functions
-    const { getVideoStatus } = require('./src/lib/video-status');
+    const { getVideoStatus } = require('./src/lib/video-generator/status');
     
     const status = await getVideoStatus(videoId);
     
