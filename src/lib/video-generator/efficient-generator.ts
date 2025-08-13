@@ -64,11 +64,16 @@ export async function generateVideo(
     const bannerImagePath = path.join(workingDir, 'banner.png');
     
     try {
-      await generateBanner({
-        story: options.story,
+      const bannerBuffer = await generateBanner({
+        title: options.story.title,
+        author: options.story.author,
+        subreddit: options.story.subreddit,
         upvotes: Math.floor(Math.random() * 500 + 100),
         comments: Math.floor(Math.random() * 100 + 20),
-      }, bannerImagePath);
+      });
+      
+      // Write the buffer to file
+      await fs.writeFile(bannerImagePath, bannerBuffer);
       console.log('✅ Dynamic banner generated successfully');
     } catch (error) {
       console.log('⚠️ Dynamic banner failed, creating simple fallback');
