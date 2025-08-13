@@ -190,8 +190,8 @@ export class FFmpegProcessor {
           .videoCodec('copy')
           .audioCodec('copy')
           .save(outputPath)
-          .on('end', resolve)
-          .on('error', reject);
+          .on('end', () => resolve())
+          .on('error', (error) => reject(error));
         return;
       }
       
