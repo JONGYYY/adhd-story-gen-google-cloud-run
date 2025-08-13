@@ -8,7 +8,7 @@ cmds = [
 ]
 
 [start]
-cmd = "node railway-backend.js"
+cmd = "node test-railway.js"
 
 [variables]
 NODE_ENV = "production" 
