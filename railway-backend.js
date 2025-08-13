@@ -4,8 +4,12 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
+console.log('Railway backend script started.'); // Added log
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+console.log(`Attempting to start server on port: ${PORT}`); // Added log
 
 // In-memory video status storage (for simplicity)
 const videoStatus = new Map();
@@ -17,6 +21,7 @@ app.use(express.static('public'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  console.log('Health check requested.'); // Added log
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -25,115 +30,39 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Simple video generation function
+// Simple video generation function (placeholder)
 async function generateVideoSimple(options, videoId) {
-  console.log(`Starting video generation for ${videoId}`);
-  
-  // Set initial status
-  videoStatus.set(videoId, {
-    status: 'processing',
-    progress: 0,
-    error: null,
-    videoUrl: null,
-    createdAt: new Date().toISOString()
-  });
+  console.log(`Generating video for ID: ${videoId} with options:`, options); // Added log
+  videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
 
-  try {
-    // Update progress
-    videoStatus.set(videoId, {
-      ...videoStatus.get(videoId),
-      status: 'processing',
-      progress: 25
-    });
+  // Simulate video generation
+  await new Promise(resolve => setTimeout(resolve, 10000)); // Simulate 10 seconds of work
 
-    // Simulate video generation process
-    console.log(`Generating video with story: ${options.customStory.title}`);
-    
-    // For now, simulate a processing delay
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    // Update progress
-    videoStatus.set(videoId, {
-      ...videoStatus.get(videoId),
-      progress: 50
-    });
-
-    // Simulate more processing
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    // Update progress
-    videoStatus.set(videoId, {
-      ...videoStatus.get(videoId),
-      progress: 75
-    });
-
-    // Simulate final processing
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Mark as completed (for now, we'll just return a placeholder)
-    const videoUrl = `/videos/${videoId}.mp4`;
-    
-    videoStatus.set(videoId, {
-      ...videoStatus.get(videoId),
-      status: 'ready',
-      progress: 100,
-      videoUrl: videoUrl
-    });
-
-    console.log(`Video generation completed for ${videoId}`);
-    return videoUrl;
-
-  } catch (error) {
-    console.error(`Video generation failed for ${videoId}:`, error);
-    
-    videoStatus.set(videoId, {
-      ...videoStatus.get(videoId),
-      status: 'failed',
-      error: error.message
-    });
-    
-    throw error;
-  }
+  videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: `/videos/${videoId}.mp4` });
+  console.log(`Video generation completed for ID: ${videoId}`); // Added log
 }
 
 // Video generation endpoint
 app.post('/generate-video', async (req, res) => {
   try {
-    console.log('Received video generation request:', JSON.stringify(req.body, null, 2));
-    
+    console.log('Received video generation request.'); // Added log
     const { customStory, voice, background, isCliffhanger } = req.body;
-    
-    if (!customStory || !voice || !background) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required parameters: customStory, voice, background'
-      });
-    }
-
-    // Generate unique video ID
     const videoId = uuidv4();
-    
-    // Start video generation in background (don't await)
-    generateVideoSimple({
-      customStory,
-      voice,
-      background,
-      isCliffhanger: isCliffhanger || false
-    }, videoId).catch(error => {
-      console.error(`Background video generation failed for ${videoId}:`, error);
-    });
-    
-    res.json({
+
+    // Start video generation in the background
+    generateVideoSimple({ customStory, voice, background, isCliffhanger }, videoId);
+
+    res.status(202).json({
       success: true,
-      videoId,
-      message: 'Video generation started'
+      message: 'Video generation started.',
+      videoId: videoId,
+      statusUrl: `/video-status/${videoId}`
     });
-    
   } catch (error) {
-    console.error('Video generation error:', error);
+    console.error('Video generation error:', error); // Added log
     res.status(500).json({
       success: false,
-      error: error.message || 'Internal server error'
+      error: error.message || 'Failed to start video generation'
     });
   }
 });
@@ -142,20 +71,16 @@ app.post('/generate-video', async (req, res) => {
 app.get('/video-status/:videoId', async (req, res) => {
   try {
     const { videoId } = req.params;
-    
+    console.log(`Video status requested for ID: ${videoId}`); // Added log
     const status = videoStatus.get(videoId);
-    
+
     if (!status) {
-      return res.status(404).json({
-        status: 'not_found',
-        error: 'Video not found'
-      });
+      return res.status(404).json({ success: false, error: 'Video ID not found.' });
     }
-    
+
     res.json(status);
-    
   } catch (error) {
-    console.error('Video status error:', error);
+    console.error('Video status error:', error); // Added log
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get video status'
@@ -175,10 +100,9 @@ app.get('/videos/:filename', (req, res) => {
   }
 });
 
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Railway backend server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/api/health`);
+// Start the server
+app.listen(PORT, () => {
+  console.log(`🚀 Railway backend server running on port ${PORT}`); // Added log
 });
 
 module.exports = app; 
