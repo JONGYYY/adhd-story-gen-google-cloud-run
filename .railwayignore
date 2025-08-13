@@ -20,6 +20,9 @@ src/
 packages/
 apps/
 
+# Ignore main package.json (we use railway-package.json instead)
+package.json
+
 # Only use our Railway-specific files
 !railway-backend.js
 !railway-package.json
