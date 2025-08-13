@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setVideoGenerating, updateProgress, setVideoReady, setVideoFailed } from '@/lib/video-generator/status';
 import { v4 as uuidv4 } from 'uuid';
-import { RemotionVideoGenerator } from '@/lib/video-generator/remotion-generator';
 
 export async function POST(request: NextRequest) {
   const videoId = uuidv4();
@@ -60,7 +59,6 @@ async function generateRemotionTestVideo(
       title: 'Production-Grade Video Generation System Demo',
       subreddit: 'r/technology',
       bgClips: [
-        // Use existing background clips
         `/backgrounds/${options.background}/1.mp4`,
         `/backgrounds/${options.background}/2.mp4`,
         `/backgrounds/${options.background}/3.mp4`
@@ -68,18 +66,19 @@ async function generateRemotionTestVideo(
       fps: 30,
       width: 1080,
       height: 1920
-    };
+    } as const;
 
     await updateProgress(videoId, 10);
 
-    // Initialize the Remotion video generator
+    // Dynamically import to avoid bundling native deps during build
+    const { RemotionVideoGenerator } = await import('@/lib/video-generator/remotion-generator');
+
     const generator = new RemotionVideoGenerator();
-    
-    console.log('🎬 Generating video with Remotion production system...');
-    const result = await generator.generateVideo(renderRequest);
+    console.log('🎬 Generating video with Remotion production system (fallback on Vercel)...');
+    const result = await generator.generateVideo(renderRequest as any);
     
     // Set video ready with the result URL
-    await setVideoReady(videoId, result.outputUrl);
+    await setVideoReady(videoId, result.outputUrl!);
     
     console.log('✅ Remotion test video generation completed successfully!');
     console.log(`📹 Video URL: ${result.outputUrl}`);
