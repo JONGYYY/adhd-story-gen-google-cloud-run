@@ -4,7 +4,7 @@ nixPkgs = ["nodejs-18_x"]
 [phases.install]
 cmds = [
     "cp railway-package.json package.json",
-    "npm ci"
+    "npm install --omit=dev"
 ]
 
 [start]
