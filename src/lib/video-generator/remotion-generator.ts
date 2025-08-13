@@ -15,29 +15,6 @@ let synthesizeWithTimestamps: any;
 let generateBannerPNG: any;
 let buildBackgroundTrack: any;
 
-// Safe optional requires for internal helpers (these are local files; if they
-// fail we fall back). They must not pull native deps at import time.
-try {
-	const whisperModule = require('../../packages/alignment/whisper');
-	synthesizeWithTimestamps = whisperModule.synthesizeWithTimestamps;
-} catch (e) {
-	console.warn('⚠️ Whisper alignment not available, using fallback');
-}
-
-try {
-	const bannerModule = require('../../packages/banner/generator');
-	generateBannerPNG = bannerModule.generateBannerPNG;
-} catch (e) {
-	console.warn('⚠️ Banner generator not available, using fallback');
-}
-
-try {
-	const ffmpegModule = require('../../packages/shared/ffmpeg');
-	buildBackgroundTrack = ffmpegModule.buildBackgroundTrack;
-} catch (e) {
-	console.warn('⚠️ FFmpeg not available, using fallback');
-}
-
 export class RemotionVideoGenerator {
 	private tempDir: string;
 	
@@ -45,10 +22,32 @@ export class RemotionVideoGenerator {
 		this.tempDir = tmpdir();
 	}
 	
+	private ensureOptionalModulesLoaded() {
+		if (!synthesizeWithTimestamps) {
+			try {
+				const whisperModule = require('../../packages/alignment/whisper');
+				synthesizeWithTimestamps = whisperModule.synthesizeWithTimestamps;
+			} catch {}
+		}
+		if (!generateBannerPNG) {
+			try {
+				const bannerModule = require('../../packages/banner/generator');
+				generateBannerPNG = bannerModule.generateBannerPNG;
+			} catch {}
+		}
+		if (!buildBackgroundTrack) {
+			try {
+				const ffmpegModule = require('../../packages/shared/ffmpeg');
+				buildBackgroundTrack = ffmpegModule.buildBackgroundTrack;
+			} catch {}
+		}
+	}
+	
 	/**
 	 * Main video generation pipeline
 	 */
 	async generateVideo(request: RenderRequest): Promise<RenderResult> {
+		this.ensureOptionalModulesLoaded();
 		const { id, script, voiceId, avatarUrl, authorName, title, subreddit, bgClips, fps = 30, width = 1080, height = 1920 } = request;
 		
 		console.log(`🎬 Starting production video generation for: ${id}`);
