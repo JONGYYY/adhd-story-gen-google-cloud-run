@@ -156,8 +156,8 @@ export class BannerGenerator {
     ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
     ctx.clip();
     
-    // Draw avatar
-    ctx.drawImage(avatar, x, y, size, size);
+    // Draw avatar - use type assertion to resolve TypeScript issue
+    (ctx as any).drawImage(avatar, x, y, size, size);
     
     ctx.restore();
     
