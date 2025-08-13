@@ -77,23 +77,12 @@ export async function generateVideo(
       console.log('✅ Dynamic banner generated successfully');
     } catch (error) {
       console.log('⚠️ Dynamic banner failed, creating simple fallback');
-      // Create a simple colored banner as fallback
-      const { createCanvas } = await import('canvas');
-      const canvas = createCanvas(800, 200);
-      const ctx = canvas.getContext('2d');
-      
-      // Orange background
-      ctx.fillStyle = '#FF4500';
-      ctx.fillRect(0, 0, 800, 200);
-      
-      // White text
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(options.story.title, 400, 100);
-      
-      const buffer = canvas.toBuffer('image/png');
-      await fs.writeFile(bannerImagePath, buffer);
+      // Create a simple fallback PNG (1x1 transparent pixel)
+      const fallbackPng = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      );
+      await fs.writeFile(bannerImagePath, fallbackPng);
     }
     
     tempFiles.push(bannerImagePath);
