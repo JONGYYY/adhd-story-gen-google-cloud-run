@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getVideoStatus } from '@/lib/video-generator/status';
 
 // Railway API configuration
-const RAILWAY_API_URL = 'https://adhd-story-gen-production.up.railway.app';
+const RAILWAY_API_URL = 'https://YOUR-ACTUAL-RAILWAY-URL.up.railway.app';
 
 async function getRailwayVideoStatus(videoId: string) {
   console.log(`Checking Railway video status for ID: ${videoId}`);
