@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { existsSync, writeFileSync } from 'fs';
-import type { RenderRequest, RenderResult } from '../../packages/shared/types';
+import type { RenderRequest, RenderResult } from '../../../packages/shared/types';
 import { updateProgress } from './status';
 
 // NOTE: Do NOT import '@remotion/renderer' here. Vercel build will try to bundle
