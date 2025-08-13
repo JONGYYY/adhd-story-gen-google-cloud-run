@@ -2,8 +2,8 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "node test-railway.js"
-healthcheckPath = "/health"
+startCommand = "node railway-backend.js"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 
 [nixpacks]

@@ -11,7 +11,7 @@ cmds = [
 cmds = []
 
 [start]
-cmd = "node test-railway.js"
+cmd = "node railway-backend.js"
 
 [variables]
 NODE_ENV = "production" 
