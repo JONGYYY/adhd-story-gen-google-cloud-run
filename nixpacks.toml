@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "python3", "python3Packages.pip", "ffmpeg", "pkg-config"]
+
+[phases.install]
+cmds = [
+    "npm ci",
+    "pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
+
+[variables]
+NODE_ENV = "production" 

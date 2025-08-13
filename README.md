@@ -4,7 +4,14 @@ A Next.js application that generates and manages ADHD-related stories and videos
 
 ## Deployment
 
-This project is deployed on Vercel at: https://adhd-story-gen.vercel.app
+### Current Architecture
+- **Frontend**: Deployed on Vercel at https://adhd-story-gen.vercel.app
+- **Backend**: Video processing deployed on Railway (see `RAILWAY_DEPLOYMENT.md`)
+
+### Hybrid Deployment Strategy
+This project uses a hybrid deployment approach:
+- **Vercel**: Hosts the Next.js frontend and lightweight API routes
+- **Railway**: Handles compute-intensive video generation with FFmpeg and Python
 
 ## Features
 
@@ -37,6 +44,15 @@ npm install
 npm run dev
 ```
 
+## Railway Deployment
+
+For deploying the video processing backend to Railway, see the detailed guide in `RAILWAY_DEPLOYMENT.md`.
+
+Quick start:
+1. Create Railway project from this GitHub repo
+2. Set environment variables from `env.railway.template`
+3. Deploy using `npm run start:railway`
+
 ## Environment Variables
 
-See the project documentation for required environment variables.
+See the project documentation and `env.railway.template` for required environment variables.
