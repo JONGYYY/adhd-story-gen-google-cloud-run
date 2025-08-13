@@ -12,11 +12,15 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer }) => {
-    // Add explicit alias resolution
+    // Add explicit alias resolution with absolute path
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname, 'src'),
+      '@': path.join(__dirname, 'src'),
+      '@/lib/utils': path.join(__dirname, 'src/lib/utils.ts'),
     };
+
+    // Ensure extensions are properly resolved
+    config.resolve.extensions = ['.tsx', '.ts', '.jsx', '.js', '.json', ...config.resolve.extensions];
 
     if (!isServer) {
       // Ensure these packages are treated as external on the client side
