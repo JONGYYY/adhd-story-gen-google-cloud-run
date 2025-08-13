@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node railway-backend.js"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+
+[nixpacks]
+nixPkgs = ["nodejs-18_x"] 
