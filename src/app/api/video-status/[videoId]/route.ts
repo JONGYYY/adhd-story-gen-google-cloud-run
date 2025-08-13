@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 // Railway API configuration
-const RAILWAY_API_URL = 'https://web-production-af24.up.railway.app';
+const RAILWAY_API_URL = 'https://web-production-5e5d1.up.railway.app';
 
 async function getRailwayVideoStatus(videoId: string) {
   console.log(`Checking Railway video status for ID: ${videoId}`);

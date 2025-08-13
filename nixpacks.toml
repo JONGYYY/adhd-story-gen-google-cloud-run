@@ -7,6 +7,9 @@ cmds = [
     "npm install --omit=dev"
 ]
 
+[phases.build]
+cmds = []
+
 [start]
 cmd = "node test-railway.js"
 
