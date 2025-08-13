@@ -2,6 +2,11 @@
   "name": "adhd-story-gen",
   "version": "0.1.0",
   "private": true,
+  "main": "railway-backend.js",
+  "engines": {
+    "node": "18.x",
+    "npm": ">=8.0.0"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -9,7 +14,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node railway-backend.js",
     "start:railway": "node railway-backend.js",
     "lint": "next lint",
     "render:local": "tsx apps/worker/src/cli.ts"
