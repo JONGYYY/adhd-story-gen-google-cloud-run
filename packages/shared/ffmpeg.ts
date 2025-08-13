@@ -51,7 +51,7 @@ export class FFmpegProcessor {
       console.log(`✅ Background track created: ${outputPath}`);
       return outputPath;
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Background track creation failed:', error);
       throw new Error(`Background track creation failed: ${error.message}`);
     }
