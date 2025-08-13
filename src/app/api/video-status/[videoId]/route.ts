@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { getVideoStatus } from '@/lib/video-generator/status';
 
 // Railway API configuration
-const RAILWAY_API_URL = 'https://web-production-5e5d1.up.railway.app';
+const RAILWAY_API_URL = 'https://adhd-story-gen-production.up.railway.app';
 
 async function getRailwayVideoStatus(videoId: string) {
   console.log(`Checking Railway video status for ID: ${videoId}`);
@@ -24,6 +25,7 @@ async function getRailwayVideoStatus(videoId: string) {
   const result = await response.json();
   console.log('Railway video status:', JSON.stringify(result, null, 2));
   
+  // Transform Railway response to match our expected format
   return {
     status: result.status,
     progress: result.progress || 0,
@@ -37,13 +39,34 @@ export async function GET(
   { params }: { params: { videoId: string } }
 ) {
   try {
-    const railwayStatus = await getRailwayVideoStatus(params.videoId);
-    return NextResponse.json(railwayStatus);
+    // First, try to get local status
+    const localStatus = await getVideoStatus(params.videoId);
+    
+    // If local status is not_found, try Railway API
+    if (localStatus.status === 'not_found') {
+      console.log('Local status not found, checking Railway API...');
+      
+      try {
+        const railwayStatus = await getRailwayVideoStatus(params.videoId);
+        return NextResponse.json(railwayStatus);
+      } catch (railwayError) {
+        console.error('Railway API error:', railwayError);
+        // If Railway also fails, return not found
+        return NextResponse.json(
+          { error: 'Video status not found' },
+          { status: 404 }
+        );
+      }
+    } else {
+      // Return local status if found
+      console.log('Found local video status:', JSON.stringify(localStatus, null, 2));
+      return NextResponse.json(localStatus);
+    }
   } catch (error) {
     console.error('Failed to get video status:', error);
     return NextResponse.json(
-      { error: 'Video status not found' },
-      { status: 404 }
+      { error: 'Failed to get video status' },
+      { status: 500 }
     );
   }
 } 
