@@ -161,7 +161,7 @@ export class WhisperAligner {
     const { mkdir } = await import('fs/promises');
     try {
       await mkdir(dirPath, { recursive: true });
-    } catch (error) {
+    } catch (error: any) {
       // Directory might already exist
       if (error.code !== 'EEXIST') {
         throw error;
