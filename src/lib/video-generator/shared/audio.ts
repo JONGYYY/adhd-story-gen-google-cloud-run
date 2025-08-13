@@ -72,7 +72,7 @@ export async function generateTTSAndAlignment(
   try {
     await fs.mkdir(jobDir, { recursive: true });
     console.log('✅ Job directory created successfully');
-  } catch (dirError) {
+  } catch (dirError: any) {
     console.error('❌ Failed to create job directory:', dirError);
     throw new Error(`Failed to create job directory: ${dirError.message}`);
   }
@@ -125,7 +125,7 @@ export async function generateTTSAndAlignment(
     const audioStats = await fs.stat(audioPath);
     console.log(`✅ Audio file verified: ${audioStats.size} bytes`);
     
-  } catch (audioError) {
+  } catch (audioError: any) {
     console.error('❌ Audio generation failed:', audioError);
     throw new Error(`Audio generation failed: ${audioError.message}`);
   }
@@ -145,7 +145,7 @@ export async function generateTTSAndAlignment(
   try {
     await fs.writeFile(alignmentPath, JSON.stringify(alignment, null, 2));
     console.log('✅ Alignment data saved successfully');
-  } catch (alignSaveError) {
+  } catch (alignSaveError: any) {
     console.error('❌ Failed to save alignment:', alignSaveError);
     throw new Error(`Failed to save alignment: ${alignSaveError.message}`);
   }
