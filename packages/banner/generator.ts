@@ -1,4 +1,4 @@
-import { createCanvas, loadImage, registerFont, Canvas, CanvasRenderingContext2D } from '@napi-rs/canvas';
+import { createCanvas, loadImage, Canvas, CanvasRenderingContext2D } from '@napi-rs/canvas';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -22,6 +22,8 @@ export class BannerGenerator {
     if (this.fontsRegistered) return;
     
     try {
+      // Try to dynamically import registerFont if available
+      const { registerFont } = require('@napi-rs/canvas');
       const fontDir = this.fontDir || join(process.cwd(), 'assets', 'fonts');
       
       // Try to register fonts if available
@@ -30,14 +32,15 @@ export class BannerGenerator {
           const fontPath = join(fontDir, filename);
           registerFont(fontPath, { family: name });
           console.log(`✅ Registered font: ${name}`);
-        } catch (error) {
+        } catch (error: any) {
           console.warn(`⚠️ Could not register font ${name}: ${error.message}`);
         }
       });
       
       this.fontsRegistered = true;
     } catch (error) {
-      console.warn('⚠️ Font registration failed, using system fonts');
+      console.warn('⚠️ Font registration not available, using system fonts');
+      this.fontsRegistered = true; // Mark as done to avoid retrying
     }
   }
   
