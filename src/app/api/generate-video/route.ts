@@ -120,22 +120,29 @@ export async function POST(request: NextRequest) {
       try {
         const railwayVideoId = await generateVideoOnRailway(options, videoId, story);
         
-        return NextResponse.json({
+        return new Response(JSON.stringify({
           success: true,
           videoId: railwayVideoId, // Use Railway's video ID
           videoUrl: `/video/${railwayVideoId}`,
           useRailway: true, // Flag to indicate Railway is being used
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
         });
       } catch (railwayError) {
         console.error('Railway API failed:', railwayError);
         const message = railwayError instanceof Error ? railwayError.message : 'Unknown error';
-        return NextResponse.json(
-          { 
-            success: false,
-            error: `Video generation service unavailable: ${message}. Please try again.` 
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Video generation service unavailable: ${message}. Please try again.` 
+        }), {
+          status: 503,
+          headers: {
+            'Content-Type': 'application/json',
           },
-          { status: 503 }
-        );
+        });
       }
     } else {
       console.log('Running locally - using local video generation');
@@ -156,11 +163,16 @@ export async function POST(request: NextRequest) {
       // Update status to ready
       await setVideoReady(videoId, outputPath);
 
-      return NextResponse.json({
+      return new Response(JSON.stringify({
         success: true,
         videoId,
         videoUrl: outputPath,
         useRailway: false,
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
     }
   } catch (error) {
@@ -172,9 +184,13 @@ export async function POST(request: NextRequest) {
       await setVideoFailed(videoId, errorMessage);
     }
     
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({
+      error: errorMessage
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
   }
 } 
