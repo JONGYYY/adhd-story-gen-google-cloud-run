@@ -11,47 +11,63 @@ const nextConfig = {
       '/api/**/*': ['./src/python/**/*', './public/backgrounds/**/*'],
     },
   },
-  webpack: (config, { isServer }) => {
-    // Add explicit alias resolution with absolute paths for ALL @/lib imports
+  webpack: (config, { isServer, dev }) => {
+    // More aggressive alias resolution with multiple strategies
+    const srcPath = path.resolve(__dirname, 'src');
+    const libPath = path.resolve(__dirname, 'src/lib');
+    
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname, 'src'),
-      '@/lib': path.resolve(__dirname, 'src/lib'),
-      '@/lib/firebase': path.resolve(__dirname, 'src/lib/firebase.ts'),
-      '@/lib/firebase-admin': path.resolve(__dirname, 'src/lib/firebase-admin.ts'),
-      '@/lib/config': path.resolve(__dirname, 'src/lib/config.ts'),
-      '@/lib/utils': path.resolve(__dirname, 'src/lib/utils.ts'),
-      '@/lib/social-media/oauth': path.resolve(__dirname, 'src/lib/social-media/oauth.ts'),
-      '@/lib/social-media/schema': path.resolve(__dirname, 'src/lib/social-media/schema.ts'),
-      '@/lib/social-media/types': path.resolve(__dirname, 'src/lib/social-media/types.ts'),
-      '@/lib/social-media/tiktok': path.resolve(__dirname, 'src/lib/social-media/tiktok.ts'),
-      '@/lib/social-media/youtube': path.resolve(__dirname, 'src/lib/social-media/youtube.ts'),
-      '@/lib/social-media/post': path.resolve(__dirname, 'src/lib/social-media/post.ts'),
-      '@/lib/video-generator': path.resolve(__dirname, 'src/lib/video-generator/index.ts'),
-      '@/lib/video-generator/types': path.resolve(__dirname, 'src/lib/video-generator/types.ts'),
-      '@/lib/video-generator/status': path.resolve(__dirname, 'src/lib/video-generator/status.ts'),
-      '@/lib/video-generator/moviepy-generator': path.resolve(__dirname, 'src/lib/video-generator/moviepy-generator.ts'),
-      '@/lib/video-generator/voice': path.resolve(__dirname, 'src/lib/video-generator/voice.ts'),
-      '@/lib/story-generator/openai': path.resolve(__dirname, 'src/lib/story-generator/openai.ts'),
-      '@/components': path.resolve(__dirname, 'src/components'),
-      '@/contexts': path.resolve(__dirname, 'src/contexts'),
-      '@/app': path.resolve(__dirname, 'src/app'),
+      // Primary aliases
+      '@': srcPath,
+      '@/lib': libPath,
+      
+      // Specific file aliases for problematic imports
+      '@/lib/firebase': path.resolve(libPath, 'firebase.ts'),
+      '@/lib/firebase-admin': path.resolve(libPath, 'firebase-admin.ts'),
+      '@/lib/config': path.resolve(libPath, 'config.ts'),
+      '@/lib/utils': path.resolve(libPath, 'utils.ts'),
+      
+      // Social media aliases
+      '@/lib/social-media/oauth': path.resolve(libPath, 'social-media/oauth.ts'),
+      '@/lib/social-media/schema': path.resolve(libPath, 'social-media/schema.ts'),
+      '@/lib/social-media/types': path.resolve(libPath, 'social-media/types.ts'),
+      '@/lib/social-media/tiktok': path.resolve(libPath, 'social-media/tiktok.ts'),
+      '@/lib/social-media/youtube': path.resolve(libPath, 'social-media/youtube.ts'),
+      '@/lib/social-media/post': path.resolve(libPath, 'social-media/post.ts'),
+      
+      // Video generator aliases
+      '@/lib/video-generator': path.resolve(libPath, 'video-generator/index.ts'),
+      '@/lib/video-generator/types': path.resolve(libPath, 'video-generator/types.ts'),
+      '@/lib/video-generator/status': path.resolve(libPath, 'video-generator/status.ts'),
+      '@/lib/video-generator/moviepy-generator': path.resolve(libPath, 'video-generator/moviepy-generator.ts'),
+      '@/lib/video-generator/voice': path.resolve(libPath, 'video-generator/voice.ts'),
+      
+      // Story generator aliases
+      '@/lib/story-generator/openai': path.resolve(libPath, 'story-generator/openai.ts'),
+      
+      // Component and context aliases
+      '@/components': path.resolve(srcPath, 'components'),
+      '@/contexts': path.resolve(srcPath, 'contexts'),
+      '@/app': path.resolve(srcPath, 'app'),
+      
       // Fix UUID compatibility issue
       'uuid/v4': 'uuid',
     };
 
-    // Ensure extensions are properly resolved
-    config.resolve.extensions = ['.tsx', '.ts', '.jsx', '.js', '.json', ...config.resolve.extensions];
-
-    // Add module resolution fallbacks
+    // Enhanced module resolution
     config.resolve.modules = [
-      path.resolve(__dirname, 'src'),
+      srcPath,
+      libPath,
       path.resolve(__dirname, 'node_modules'),
-      ...config.resolve.modules
+      'node_modules'
     ];
 
+    // Ensure extensions are properly resolved
+    config.resolve.extensions = ['.ts', '.tsx', '.js', '.jsx', '.json'];
+
+    // Add fallbacks for client-side
     if (!isServer) {
-      // Ensure these packages are treated as external on the client side
       config.resolve.fallback = {
         ...config.resolve.fallback,
         'firebase-admin': false,
@@ -62,16 +78,22 @@ const nextConfig = {
         'fs': false,
         'path': false,
         'os': false,
+        'crypto': false,
+        'stream': false,
+        'util': false,
       };
     }
     
-    // Handle undici module parsing issue
+    // Handle module parsing issues
     config.module.rules.push({
       test: /\.m?js$/,
       resolve: {
         fullySpecified: false,
       },
     });
+    
+    // Force resolve symlinks
+    config.resolve.symlinks = false;
     
     return config;
   },
