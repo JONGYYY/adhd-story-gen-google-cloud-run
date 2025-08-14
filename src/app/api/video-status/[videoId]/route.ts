@@ -56,25 +56,43 @@ export async function GET(
       
       try {
         const railwayStatus = await getRailwayVideoStatus(params.videoId);
-        return NextResponse.json(railwayStatus);
+        return new Response(JSON.stringify(railwayStatus), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
       } catch (railwayError) {
         console.error('Railway API error:', railwayError);
         // If Railway also fails, return not found
-        return NextResponse.json(
-          { error: 'Video status not found' },
-          { status: 404 }
-        );
+        return new Response(JSON.stringify({
+          error: 'Video status not found'
+        }), {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
       }
     } else {
       // Return local status if found
       console.log('Found local video status:', JSON.stringify(localStatus, null, 2));
-      return NextResponse.json(localStatus);
+      return new Response(JSON.stringify(localStatus), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
     }
   } catch (error) {
     console.error('Failed to get video status:', error);
-    return NextResponse.json(
-      { error: 'Failed to get video status' },
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({
+      error: 'Failed to get video status'
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
   }
 } 
