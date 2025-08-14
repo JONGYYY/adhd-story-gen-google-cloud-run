@@ -1,13 +1,13 @@
 [build]
-  command = "npm install && node prebuild.js && npm run build"
+  command = "npm install --no-optional --no-audit --no-fund && node prebuild.js && npm run build"
   publish = ".next"
 
 [build.environment]
   NODE_VERSION = "22"
-  NPM_FLAGS = "--production=false"
   NODE_OPTIONS = "--max-old-space-size=4096"
-  NODE_ENV = "production"
   NEXT_TELEMETRY_DISABLED = "1"
+  NPM_CONFIG_PROGRESS = "false"
+  NPM_CONFIG_LOGLEVEL = "error"
 
 [[redirects]]
   from = "/api/*"
