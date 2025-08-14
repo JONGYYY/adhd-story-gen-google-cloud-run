@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Clock, Video, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
-import { PageContainer } from '@/components/layout/page-container';
 import { DayPicker } from 'react-day-picker';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 import type { DayProps } from 'react-day-picker';
 
 export default function Schedule() {
@@ -48,8 +50,7 @@ export default function Schedule() {
   };
 
   return (
-    <PageContainer>
-      {/* Page Header */}
+    <>
       <div className="bg-gray-800 border-b border-gray-700 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
@@ -154,6 +155,6 @@ export default function Schedule() {
           </div>
         </div>
       </div>
-    </PageContainer>
+    </>
   );
 } 
