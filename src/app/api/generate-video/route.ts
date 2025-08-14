@@ -6,13 +6,18 @@ import { generateStory } from '@/lib/story-generator/openai';
 import { createVideoStatus, setVideoReady, setVideoFailed } from '@/lib/video-generator/status';
 
 // Prevent static generation but use Node.js runtime for video generation
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Railway API configuration
-const RAILWAY_API_URL = 'https://adhd-story-gen-production.up.railway.app';
+// Railway API configuration (set in Vercel env)
+const RAILWAY_API_URL = process.env.RAILWAY_API_URL;
 
 // Force deployment trigger - updated with simplified Railway backend
 async function generateVideoOnRailway(options: VideoOptions, videoId: string, story: SubredditStory) {
+  if (!RAILWAY_API_URL) {
+    throw new Error('Missing RAILWAY_API_URL environment variable');
+  }
+
   const railwayRequest = {
     subreddit: story.subreddit,
     isCliffhanger: options.isCliffhanger,
@@ -62,8 +67,7 @@ async function generateVideoOnRailway(options: VideoOptions, videoId: string, st
     return result.videoId; // Railway returns its own video ID
   } catch (error) {
     console.error('Error calling Railway API:', error);
-    // If Railway fails, fall back to local video ID and let the status API handle it
-    console.log('Railway API failed, falling back to local video ID:', videoId);
+    // If Railway fails, surface the error to the caller
     throw error;
   }
 }
@@ -123,11 +127,11 @@ export async function POST(request: NextRequest) {
         });
       } catch (railwayError) {
         console.error('Railway API failed:', railwayError);
-        // Return error instead of falling back to avoid confusion
+        const message = railwayError instanceof Error ? railwayError.message : 'Unknown error';
         return NextResponse.json(
           { 
             success: false,
-            error: `Video generation service unavailable: ${railwayError instanceof Error ? railwayError.message : 'Unknown error'}. Please try again.` 
+            error: `Video generation service unavailable: ${message}. Please try again.` 
           },
           { status: 503 }
         );

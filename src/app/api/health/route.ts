@@ -18,6 +18,9 @@ export async function GET() {
         projectId: process.env.FIREBASE_ADMIN_PROJECT_ID ? 'Set' : 'Missing',
         clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL ? 'Set' : 'Missing',
         privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY ? 'Set' : 'Missing',
+      },
+      railway: {
+        apiUrlSet: !!process.env.RAILWAY_API_URL,
       }
     });
   } catch (error) {

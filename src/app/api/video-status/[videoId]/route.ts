@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getVideoStatus } from '@/lib/video-generator/status';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // Railway API configuration
-const RAILWAY_API_URL = 'https://adhd-story-gen-production.up.railway.app';
+const RAILWAY_API_URL = process.env.RAILWAY_API_URL;
 
 async function getRailwayVideoStatus(videoId: string) {
+  if (!RAILWAY_API_URL) {
+    throw new Error('Missing RAILWAY_API_URL environment variable');
+  }
+
   console.log(`Checking Railway video status for ID: ${videoId}`);
   
   const response = await fetch(`${RAILWAY_API_URL}/video-status/${videoId}`, {
