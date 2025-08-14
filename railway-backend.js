@@ -82,35 +82,24 @@ async function generateVideoSimple(options, videoId) {
   videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
 
   // Simulate progress
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 1000));
   videoStatus.set(videoId, { status: 'processing', progress: 25, message: 'Generating voice-over...' });
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 1000));
   videoStatus.set(videoId, { status: 'processing', progress: 50, message: 'Compositing video...' });
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 1000));
   videoStatus.set(videoId, { status: 'processing', progress: 75, message: 'Finalizing...' });
 
-  // Ensure videos directory exists
-  const videosDir = await ensureVideosDir();
+  // Use a stable, small public MP4 so the URL is immediately accessible
+  const externalSampleUrl = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
 
-  // Copy a sample mp4 to public/videos/<id>.mp4 so it is actually served
-  try {
-    const preferredCategory = options?.background?.category;
-    const src = await resolveSampleMp4(preferredCategory);
-    if (!src) {
-      console.warn('No sample MP4 found to copy; keeping status processing until available');
-    } else {
-      const dest = path.join(videosDir, `${videoId}.mp4`);
-      await fsp.copyFile(src, dest);
-      console.log(`Copied sample video from ${src} to ${dest}`);
-      videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: `/videos/${videoId}.mp4` });
-      console.log(`Video generation completed for ID: ${videoId}`); // Added log
-      return;
-    }
-  } catch (copyErr) {
-    console.error('Error copying sample mp4:', copyErr);
-  }
+  videoStatus.set(videoId, {
+    status: 'completed',
+    progress: 100,
+    message: 'Video generation complete.',
+    videoUrl: externalSampleUrl
+  });
 
-  // If we reach here, file not yet available; leave as processing (poller will keep trying)
+  console.log(`Video generation completed for ID: ${videoId}`); // Added log
 }
 
 // Video generation endpoint
