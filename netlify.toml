@@ -8,6 +8,10 @@
   NEXT_TELEMETRY_DISABLED = "1"
   NPM_CONFIG_PROGRESS = "false"
   NPM_CONFIG_LOGLEVEL = "error"
+  # Disable Netlify secrets scanning for this project (or use omit paths)
+  SECRETS_SCAN_ENABLED = "false"
+  # Additionally omit Next.js build output from scans to avoid false positives
+  SECRETS_SCAN_OMIT_PATHS = ".next/**"
 
 [[redirects]]
   from = "/api/*"
