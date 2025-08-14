@@ -25,8 +25,14 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function generateStory({ subreddit, isCliffhanger, narratorGender }: StoryPrompt): Promise<SubredditStory> {
-  console.log('Generating story with params:', JSON.stringify({ subreddit, isCliffhanger, narratorGender }, null, 2));
+export async function generateStory({ subreddit, isCliffhanger, narratorGender }: StoryPrompt, retryCount = 0): Promise<SubredditStory> {
+  const maxRetries = 3;
+  console.log('Generating story with params:', JSON.stringify({ subreddit, isCliffhanger, narratorGender, retryCount }, null, 2));
+  
+  if (retryCount > maxRetries) {
+    console.error('Max retries exceeded for story generation');
+    throw new Error('Failed to generate valid story after maximum retries');
+  }
   
   const promptTemplate = SUBREDDIT_PROMPTS[subreddit]?.[isCliffhanger ? 'cliffhanger' : 'full'];
   console.log('Found prompt template:', promptTemplate ? 'yes' : 'no');
@@ -38,7 +44,7 @@ export async function generateStory({ subreddit, isCliffhanger, narratorGender }
   }
 
   try {
-    console.log(`Generating ${isCliffhanger ? 'cliffhanger' : 'full'} story for ${subreddit}`);
+    console.log(`Generating ${isCliffhanger ? 'cliffhanger' : 'full'} story for ${subreddit} (attempt ${retryCount + 1})`);
     console.log('Using prompt template:', promptTemplate);
     
     const completion = await openai.chat.completions.create({
@@ -122,8 +128,23 @@ export async function generateStory({ subreddit, isCliffhanger, narratorGender }
 
     // Ensure story has proper structure for cliffhangers
     if (isCliffhanger && !story.story.includes('[BREAK]')) {
-      console.log('Cliffhanger story missing [BREAK] tag, regenerating...');
-      return generateStory({ subreddit, isCliffhanger, narratorGender });
+      console.log(`Cliffhanger story missing [BREAK] tag, retrying (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+      if (retryCount < maxRetries) {
+        return generateStory({ subreddit, isCliffhanger, narratorGender }, retryCount + 1);
+      } else {
+        console.error('Failed to generate cliffhanger story with [BREAK] tag after max retries');
+        // Add [BREAK] manually as fallback
+        const sentences = story.story.split('. ');
+        if (sentences.length > 1) {
+          const midPoint = Math.floor(sentences.length / 2);
+          sentences.splice(midPoint, 0, '[BREAK]');
+          story.story = sentences.join('. ').replace('. [BREAK]. ', '. [BREAK] ');
+          console.log('Added [BREAK] tag manually at midpoint');
+        } else {
+          story.story = story.story + ' [BREAK] What happens next?';
+          console.log('Added [BREAK] tag at end as fallback');
+        }
+      }
     }
 
     console.log('Successfully generated and validated story:', JSON.stringify(story, null, 2));
