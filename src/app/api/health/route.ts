@@ -5,6 +5,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    const rawRailway = (process.env.RAILWAY_API_URL || process.env.NEXT_PUBLIC_RAILWAY_API_URL || '').trim();
+    const effectiveRailway = rawRailway.replace(/\/$/, '');
+
     return NextResponse.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -20,7 +23,8 @@ export async function GET() {
         privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY ? 'Set' : 'Missing',
       },
       railway: {
-        apiUrlSet: !!process.env.RAILWAY_API_URL,
+        apiUrlSet: !!effectiveRailway,
+        usingNextPublic: !!process.env.NEXT_PUBLIC_RAILWAY_API_URL && !process.env.RAILWAY_API_URL,
       }
     });
   } catch (error) {
