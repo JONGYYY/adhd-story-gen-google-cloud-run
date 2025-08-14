@@ -8,6 +8,13 @@ export const dynamic = 'force-dynamic';
 const RAW_RAILWAY_API_URL = (process.env.RAILWAY_API_URL || process.env.NEXT_PUBLIC_RAILWAY_API_URL || 'https://web-production-5e5d1.up.railway.app').trim();
 const RAILWAY_API_URL = RAW_RAILWAY_API_URL.replace(/\/$/, '');
 
+function toFrontendStatus(railwayStatus: string): 'generating' | 'ready' | 'failed' {
+  if (railwayStatus === 'processing') return 'generating';
+  if (railwayStatus === 'completed') return 'ready';
+  if (railwayStatus === 'failed') return 'failed';
+  return 'generating';
+}
+
 async function getRailwayVideoStatus(videoId: string) {
   if (!RAILWAY_API_URL) {
     throw new Error('Missing RAILWAY_API_URL environment variable');
@@ -19,6 +26,8 @@ async function getRailwayVideoStatus(videoId: string) {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Pragma': 'no-cache'
     },
   });
 
@@ -35,8 +44,8 @@ async function getRailwayVideoStatus(videoId: string) {
   
   // Transform Railway response to match our expected format
   return {
-    status: result.status,
-    progress: result.progress || 0,
+    status: toFrontendStatus(result.status),
+    progress: typeof result.progress === 'number' ? result.progress : (result.status === 'completed' ? 100 : 0),
     error: result.error,
     videoUrl: result.videoUrl ? `${RAILWAY_API_URL}${result.videoUrl}` : null,
   };
@@ -60,6 +69,8 @@ export async function GET(
           status: 200,
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            'Pragma': 'no-cache'
           },
         });
       } catch (railwayError) {
@@ -71,6 +82,8 @@ export async function GET(
           status: 404,
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            'Pragma': 'no-cache'
           },
         });
       }
@@ -81,6 +94,8 @@ export async function GET(
         status: 200,
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'Pragma': 'no-cache'
         },
       });
     }
@@ -92,6 +107,8 @@ export async function GET(
       status: 500,
       headers: {
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+        'Pragma': 'no-cache'
       },
     });
   }
