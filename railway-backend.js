@@ -27,32 +27,19 @@ async function ensureVideosDir() {
   return videosDir;
 }
 
-// Pick a sample background mp4 to copy
+// Pick a sample background mp4 to copy (kept for reference/local assets)
 async function resolveSampleMp4(preferredCategory) {
   const backgroundsRoot = path.join(__dirname, 'public', 'backgrounds');
   // Prefer smaller samples first to reduce copy time
   const orderedBySizeGuess = [
-    'subway',
-    'asmr',
-    'cooking',
-    'workers',
-    preferredCategory,
-    'minecraft'
+    'subway', 'asmr', 'cooking', 'workers', preferredCategory, 'minecraft'
   ].filter(Boolean);
-
-  // De-duplicate while preserving order
   const seen = new Set();
-  const candidates = orderedBySizeGuess.filter((c) => {
-    if (seen.has(c)) return false;
-    seen.add(c); return true;
-  });
-
+  const candidates = orderedBySizeGuess.filter((c) => { if (seen.has(c)) return false; seen.add(c); return true; });
   for (const cat of candidates) {
     const candidate = path.join(backgroundsRoot, cat, '1.mp4');
     if (fs.existsSync(candidate)) return candidate;
   }
-
-  // Fallback: scan backgrounds for any 1.mp4
   try {
     const dirs = await fsp.readdir(backgroundsRoot);
     for (const dir of dirs) {
@@ -63,67 +50,6 @@ async function resolveSampleMp4(preferredCategory) {
     console.error('Failed to scan backgrounds directory:', e);
   }
   return null;
-}
-
-// Simple helper: build a demo video by overlaying text on a sample clip
-async function buildDemoVideo({ title, story }, videoId) {
-  const videosDir = await ensureVideosDir();
-  const outPath = path.join(videosDir, `${videoId}.mp4`);
-  const sample = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
-  // Download sample to tmp and then compose
-  const tmpDir = path.join(__dirname, 'tmp');
-  await fsp.mkdir(tmpDir, { recursive: true });
-  const samplePath = path.join(tmpDir, 'sample.mp4');
-
-  // naive fetch
-  const res = await fetch(sample);
-  const buf = Buffer.from(await res.arrayBuffer());
-  await fsp.writeFile(samplePath, buf);
-
-  const overlayTitle = (title || 'Demo Title').replace(/:/g, '\\\:');
-  const overlayStory = (story || 'Demo story line [BREAK] more').replace(/:/g, '\\\:');
-
-  const { spawn } = require('child_process');
-  const drawText = `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${overlayTitle}':x=(w-text_w)/2:y=H*0.1:fontsize=36:fontcolor=white:box=1:boxcolor=0x00000088,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${overlayStory}':x=(w-text_w)/2:y=H*0.8:fontsize=24:fontcolor=white:box=1:boxcolor=0x00000088`;
-  await new Promise((resolve, reject) => {
-    const ff = spawn('ffmpeg', ['-y', '-i', samplePath, '-vf', drawText, '-c:a', 'copy', outPath]);
-    ff.stderr.on('data', (d) => process.stderr.write(d));
-    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
-  });
-
-  return `/videos/${videoId}.mp4`;
-}
-
-// Simple video generation function (placeholder)
-async function generateVideoSimple(options, videoId) {
-  console.log(`Generating video for ID: ${videoId} with options:`, options); // Added log
-  videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
-
-  // Simulate progress
-  await new Promise(resolve => setTimeout(resolve, 500));
-  videoStatus.set(videoId, { status: 'processing', progress: 25, message: 'Generating voice-over...' });
-  await new Promise(resolve => setTimeout(resolve, 500));
-  videoStatus.set(videoId, { status: 'processing', progress: 50, message: 'Compositing video...' });
-  await new Promise(resolve => setTimeout(resolve, 500));
-  videoStatus.set(videoId, { status: 'processing', progress: 75, message: 'Finalizing...' });
-
-  try {
-    const videoUrl = await buildDemoVideo({
-      title: options?.customStory?.title,
-      story: options?.customStory?.story,
-    }, videoId);
-
-    videoStatus.set(videoId, {
-      status: 'completed',
-      progress: 100,
-      message: 'Video generation complete.',
-      videoUrl
-    });
-    console.log(`Video generation completed for ID: ${videoId}`);
-  } catch (err) {
-    console.error('Demo ffmpeg build failed:', err);
-    videoStatus.set(videoId, { status: 'failed', error: 'Video build failed' });
-  }
 }
 
 // Health check endpoint
@@ -137,6 +63,146 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// External background mapping (replace with your own CDN later)
+const EXTERNAL_BG = {
+  minecraft: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  subway: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  cooking: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  workers: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  asmr: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  random: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
+};
+
+// ElevenLabs
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const VOICE_IDS = {
+  brian: 'ThT5KcBeYPX3keUQqHPh',
+  adam: 'pNInz6obpgDQGcFmaJgB',
+  antoni: 'ErXwobaYiN019PkySvjV',
+  sarah: 'EXAVITQu4vr4xnSDxMaL',
+  laura: 'pFZP5JQG7iQjIQuC4Bku',
+  rachel: '21m00Tcm4TlvDq8ikWAM'
+};
+
+async function synthesizeVoiceEleven(text, voiceAlias) {
+  if (!ELEVENLABS_API_KEY || !voiceAlias || !VOICE_IDS[voiceAlias]) {
+    console.warn('TTS disabled or voice not found. Skipping.');
+    return null;
+  }
+  const voiceId = VOICE_IDS[voiceAlias];
+  const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'audio/mpeg',
+      'Content-Type': 'application/json',
+      'xi-api-key': ELEVENLABS_API_KEY
+    },
+    body: JSON.stringify({
+      text,
+      model_id: 'eleven_monolingual_v1',
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+    })
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(`ElevenLabs error ${resp.status}: ${t}`);
+  }
+  const buf = Buffer.from(await resp.arrayBuffer());
+  return buf;
+}
+
+// Build video with ffmpeg: background + optional TTS audio (no text overlay to avoid font issues)
+async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAlias }, videoId) {
+  const videosDir = await ensureVideosDir();
+  const outPath = path.join(videosDir, `${videoId}.mp4`);
+
+  // Resolve local background source from public/backgrounds
+  function resolveLocalBg(category) {
+    const p = path.join(__dirname, 'public', 'backgrounds', category, '1.mp4');
+    return fs.existsSync(p) ? p : null;
+  }
+  let bgPath = resolveLocalBg(backgroundCategory) || resolveLocalBg('subway') || resolveLocalBg('minecraft');
+  if (!bgPath) {
+    // Final fallback: download small external clip
+    const external = EXTERNAL_BG.random;
+    const tmpDir = path.join(__dirname, 'tmp');
+    await fsp.mkdir(tmpDir, { recursive: true });
+    bgPath = path.join(tmpDir, `bg-${videoId}.mp4`);
+    const bgRes = await fetch(external);
+    const bgBuf = Buffer.from(await bgRes.arrayBuffer());
+    await fsp.writeFile(bgPath, bgBuf);
+  }
+
+  // Synthesize TTS (if configured)
+  const narration = story || '';
+  const ttsBuf = await synthesizeVoiceEleven(narration, voiceAlias).catch((e) => {
+    console.error('TTS failed:', e);
+    return null;
+  });
+  const tmpDir = path.join(__dirname, 'tmp');
+  await fsp.mkdir(tmpDir, { recursive: true });
+  const audioPath = path.join(tmpDir, `audio-${videoId}.mp3`);
+  if (ttsBuf) await fsp.writeFile(audioPath, ttsBuf);
+
+  const { spawn } = require('child_process');
+
+  async function run(args) {
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', args);
+      ff.stderr.on('data', (d) => process.stderr.write(d));
+      ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code} with args: ${args.join(' ')}`))));
+    });
+  }
+
+  try {
+    if (ttsBuf) {
+      // Fast path: try stream copy video, encode audio, and cut to shortest
+      await run(['-y', '-i', bgPath, '-i', audioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-shortest', outPath]);
+    } else {
+      // No audio: just copy video
+      await run(['-y', '-i', bgPath, '-c', 'copy', outPath]);
+    }
+  } catch (e) {
+    console.warn('ffmpeg fast path failed, retrying with re-encode:', e.message);
+    // Fallback: re-encode video to H.264 + AAC
+    if (ttsBuf) {
+      await run(['-y', '-i', bgPath, '-i', audioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-shortest', outPath]);
+    } else {
+      await run(['-y', '-i', bgPath, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-an', outPath]);
+    }
+  }
+
+  return `/videos/${videoId}.mp4`;
+}
+
+// Simple video generation function
+async function generateVideoSimple(options, videoId) {
+  console.log(`Generating video for ID: ${videoId} with options:`, options); // Added log
+  videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
+
+  await new Promise((r) => setTimeout(r, 300));
+  videoStatus.set(videoId, { status: 'processing', progress: 25, message: 'Generating voice-over...' });
+  await new Promise((r) => setTimeout(r, 300));
+  videoStatus.set(videoId, { status: 'processing', progress: 50, message: 'Compositing video...' });
+  await new Promise((r) => setTimeout(r, 300));
+  videoStatus.set(videoId, { status: 'processing', progress: 75, message: 'Finalizing...' });
+
+  try {
+    const videoUrl = await buildVideoWithFfmpeg({
+      title: options?.customStory?.title,
+      story: options?.customStory?.story,
+      backgroundCategory: options?.background?.category || 'random',
+      voiceAlias: options?.voice?.id
+    }, videoId);
+
+    videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl });
+    console.log(`Video generation completed for ID: ${videoId}`);
+  } catch (err) {
+    console.error('Video build failed:', err);
+    videoStatus.set(videoId, { status: 'failed', error: 'Video build failed' });
+  }
+}
+
 // Video generation endpoint
 app.post('/generate-video', async (req, res) => {
   try {
@@ -147,18 +213,10 @@ app.post('/generate-video', async (req, res) => {
     // Start video generation in the background
     generateVideoSimple({ customStory, voice, background, isCliffhanger }, videoId);
 
-    res.status(202).json({
-      success: true,
-      message: 'Video generation started.',
-      videoId: videoId,
-      statusUrl: `/video-status/${videoId}`
-    });
+    res.status(202).json({ success: true, message: 'Video generation started.', videoId, statusUrl: `/video-status/${videoId}` });
   } catch (error) {
     console.error('Video generation error:', error); // Added log
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to start video generation'
-    });
+    res.status(500).json({ success: false, error: error.message || 'Failed to start video generation' });
   }
 });
 
@@ -176,10 +234,7 @@ app.get('/video-status/:videoId', async (req, res) => {
     res.json(status);
   } catch (error) {
     console.error('Video status error:', error); // Added log
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to get video status'
-    });
+    res.status(500).json({ success: false, error: error.message || 'Failed to get video status' });
   }
 });
 
