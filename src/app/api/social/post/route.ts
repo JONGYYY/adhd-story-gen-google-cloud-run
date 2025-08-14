@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 type Platform = 'tiktok' | 'youtube_shorts';
 
 export async function POST(request: NextRequest) {
