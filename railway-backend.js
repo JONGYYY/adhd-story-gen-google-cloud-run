@@ -200,7 +200,8 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
 
   // Build filter_complex: scale+crop to 1080x1920, overlay banner during opening, draw per-word captions.
   let filter = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=0.05:contrast=1.1:saturation=1.1[bg];`;
-  if (fs.existsSync(bannerPath)) {
+  const bannerExists = fs.existsSync(bannerPath);
+  if (bannerExists) {
     filter += `[1:v]scale=800:-1[banner];[bg][banner]overlay=40:40:enable='between(t,0,${openingDur.toFixed(2)})'[v0]`;
   } else {
     filter += `[bg]null[v0]`;
@@ -217,24 +218,37 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
     current = `t${i}`;
   });
 
+  // Prepare inputs and determine indexes
   const args = ['-y', '-i', bgPath];
-  if (fs.existsSync(bannerPath)) args.push('-i', bannerPath);
+  let idx = 1;
+  const bannerIdx = bannerExists ? idx++ : -1;
+  const openingIdx = openingBuf ? idx++ : -1;
+  const storyIdx = storyBuf ? idx++ : -1;
+  if (bannerExists) args.push('-i', bannerPath);
   if (openingBuf) args.push('-i', openingAudio);
   if (storyBuf) args.push('-i', storyAudio);
 
+  // Audio graph within the same filter_complex
+  let haveAudio = false;
+  if (openingIdx >= 0 && storyIdx >= 0) {
+    haveAudio = true;
+    filter += `;[${openingIdx}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100,asetpts=PTS-STARTPTS[oa];` +
+              `[${storyIdx}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100,asetpts=PTS-STARTPTS[sa];` +
+              `[oa][sa]concat=n=2:v=0:a=1[aout]`;
+  } else if (openingIdx >= 0) {
+    haveAudio = true;
+    filter += `;[${openingIdx}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100,asetpts=PTS-STARTPTS[aout]`;
+  } else if (storyIdx >= 0) {
+    haveAudio = true;
+    filter += `;[${storyIdx}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100,asetpts=PTS-STARTPTS[aout]`;
+  }
+
+  // Apply single filter_complex and proper mapping
   args.push(
     '-filter_complex', filter,
-    '-map', `[${current}]`,
-    // Audio: concat opening + story if both, else whichever exists
+    '-map', `[${current}]`
   );
-
-  if (openingBuf && storyBuf) {
-    args.push('-map', '2:a', '-map', '3:a', '-filter_complex', `${filter};[2:a][3:a]concat=n=2:v=0:a=1[aout]`, '-map', '[aout]');
-  } else if (openingBuf) {
-    args.push('-map', '2:a');
-  } else if (storyBuf) {
-    args.push('-map', '2:a');
-  }
+  if (haveAudio) args.push('-map', '[aout]');
 
   args.push(
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
