@@ -111,22 +111,42 @@ async function synthesizeVoiceEleven(text, voiceAlias) {
   return buf;
 }
 
-// Build video with ffmpeg: background + optional TTS audio (no text overlay to avoid font issues)
+// Helpers to get audio duration with ffprobe and build word timestamps
+async function getAudioDurationFromFile(audioPath) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const ffprobe = spawn('ffprobe', ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', audioPath]);
+    let output = '';
+    ffprobe.stdout.on('data', (d) => (output += d.toString()));
+    ffprobe.on('close', (code) => {
+      if (code === 0) resolve(parseFloat(output.trim()));
+      else reject(new Error(`ffprobe failed with code ${code}`));
+    });
+    ffprobe.on('error', reject);
+  });
+}
+
+function buildWordTimestamps(totalDuration, text) {
+  const words = (text || '').split(/\s+/).filter((w) => w.length > 0);
+  if (words.length === 0 || !isFinite(totalDuration) || totalDuration <= 0) return [];
+  const avg = totalDuration / words.length;
+  return words.map((w, i) => ({ text: w, start: i * avg, end: (i + 1) * avg }));
+}
+
 async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAlias }, videoId) {
   const videosDir = await ensureVideosDir();
   const outPath = path.join(videosDir, `${videoId}.mp4`);
 
-  // Resolve local background source from public/backgrounds
+  // Resolve BG (remote env URL preferred, else local public/backgrounds/<cat>/1.mp4, else fallback)
   function resolveLocalBg(category) {
     const p = path.join(__dirname, 'public', 'backgrounds', category, '1.mp4');
     return fs.existsSync(p) ? p : null;
   }
-  // Prefer env-provided remote URL, else local file, else random external fallback
   const preferredRemote = EXTERNAL_BG[backgroundCategory] || null;
   let bgPath;
+  const tmpDir = path.join(__dirname, 'tmp');
+  await fsp.mkdir(tmpDir, { recursive: true });
   if (preferredRemote && preferredRemote.startsWith('http')) {
-    const tmpDir = path.join(__dirname, 'tmp');
-    await fsp.mkdir(tmpDir, { recursive: true });
     bgPath = path.join(tmpDir, `bg-${videoId}.mp4`);
     const bgRes = await fetch(preferredRemote);
     const bgBuf = Buffer.from(await bgRes.arrayBuffer());
@@ -134,8 +154,6 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
   } else {
     bgPath = resolveLocalBg(backgroundCategory) || resolveLocalBg('subway') || resolveLocalBg('minecraft');
     if (!bgPath) {
-      const tmpDir = path.join(__dirname, 'tmp');
-      await fsp.mkdir(tmpDir, { recursive: true });
       bgPath = path.join(tmpDir, `bg-${videoId}.mp4`);
       const fallback = EXTERNAL_BG.random;
       const bgRes = await fetch(fallback);
@@ -144,44 +162,92 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
     }
   }
 
-  // Synthesize TTS (if configured)
-  const narration = story || '';
-  const ttsBuf = await synthesizeVoiceEleven(narration, voiceAlias).catch((e) => {
-    console.error('TTS failed:', e);
-    return null;
-  });
-  const tmpDir = path.join(__dirname, 'tmp');
-  await fsp.mkdir(tmpDir, { recursive: true });
-  const audioPath = path.join(tmpDir, `audio-${videoId}.mp3`);
-  if (ttsBuf) await fsp.writeFile(audioPath, ttsBuf);
+  // Synthesize TTS for title and story segments
+  const openingText = title || '';
+  const storyText = (story || '').split('[BREAK]')[0].trim() || story || '';
+  const openingBuf = await synthesizeVoiceEleven(openingText, voiceAlias).catch(() => null);
+  const storyBuf = await synthesizeVoiceEleven(storyText, voiceAlias).catch(() => null);
+
+  // Write audio to files
+  const openingAudio = path.join(tmpDir, `open-${videoId}.mp3`);
+  const storyAudio = path.join(tmpDir, `story-${videoId}.mp3`);
+  if (openingBuf) await fsp.writeFile(openingAudio, openingBuf);
+  if (storyBuf) await fsp.writeFile(storyAudio, storyBuf);
+
+  // Durations
+  const openingDur = openingBuf ? await getAudioDurationFromFile(openingAudio) : 0.8;
+  const storyDur = storyBuf ? await getAudioDurationFromFile(storyAudio) : 3.0;
+
+  // Word timestamps for captions
+  const wordTimestamps = buildWordTimestamps(storyDur, storyText);
+
+  // Banner image (overlay during opening). Use existing static banner asset.
+  const bannerPath = path.join(__dirname, 'public', 'banners', 'redditbannertop.png');
+
+  // Font fallback
+  let fontPath = '';
+  const candidates = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/System/Library/Fonts/Helvetica.ttc',
+    '/Windows/Fonts/arial.ttf'
+  ];
+  for (const f of candidates) {
+    try { if (fs.existsSync(f)) { fontPath = f; break; } } catch {}
+  }
 
   const { spawn } = require('child_process');
 
-  async function run(args) {
-    await new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', args);
-      ff.stderr.on('data', (d) => process.stderr.write(d));
-      ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code} with args: ${args.join(' ')}`))));
-    });
+  // Build filter_complex: scale+crop to 1080x1920, overlay banner during opening, draw per-word captions.
+  let filter = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=0.05:contrast=1.1:saturation=1.1[bg];`;
+  if (fs.existsSync(bannerPath)) {
+    filter += `[1:v]scale=800:-1[banner];[bg][banner]overlay=40:40:enable='between(t,0,${openingDur.toFixed(2)})'[v0]`;
+  } else {
+    filter += `[bg]null[v0]`;
+  }
+  let current = 'v0';
+  wordTimestamps.forEach((w, i) => {
+    const st = (openingDur + w.start).toFixed(2);
+    const en = (openingDur + w.end).toFixed(2);
+    const txt = (w.text || '').replace(/'/g, "\\'").replace(/:/g, '\\:');
+    const draw = fontPath
+      ? `drawtext=fontfile='${fontPath}':text='${txt.toUpperCase()}':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=h-380:enable='between(t,${st},${en})':box=1:boxcolor=black@0.65:boxborderw=15:shadowx=3:shadowy=3:shadowcolor=black@0.8`
+      : `drawtext=text='${txt.toUpperCase()}':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=h-380:enable='between(t,${st},${en})':box=1:boxcolor=black@0.65:boxborderw=15:shadowx=3:shadowy=3:shadowcolor=black@0.8`;
+    filter += `;[${current}]${draw}[t${i}]`;
+    current = `t${i}`;
+  });
+
+  const args = ['-y', '-i', bgPath];
+  if (fs.existsSync(bannerPath)) args.push('-i', bannerPath);
+  if (openingBuf) args.push('-i', openingAudio);
+  if (storyBuf) args.push('-i', storyAudio);
+
+  args.push(
+    '-filter_complex', filter,
+    '-map', `[${current}]`,
+    // Audio: concat opening + story if both, else whichever exists
+  );
+
+  if (openingBuf && storyBuf) {
+    args.push('-map', '2:a', '-map', '3:a', '-filter_complex', `${filter};[2:a][3:a]concat=n=2:v=0:a=1[aout]`, '-map', '[aout]');
+  } else if (openingBuf) {
+    args.push('-map', '2:a');
+  } else if (storyBuf) {
+    args.push('-map', '2:a');
   }
 
-  try {
-    if (ttsBuf) {
-      // Fast path: try stream copy video, encode audio, and cut to shortest
-      await run(['-y', '-i', bgPath, '-i', audioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-shortest', outPath]);
-    } else {
-      // No audio: just copy video
-      await run(['-y', '-i', bgPath, '-c', 'copy', outPath]);
-    }
-  } catch (e) {
-    console.warn('ffmpeg fast path failed, retrying with re-encode:', e.message);
-    // Fallback: re-encode video to H.264 + AAC
-    if (ttsBuf) {
-      await run(['-y', '-i', bgPath, '-i', audioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-shortest', outPath]);
-    } else {
-      await run(['-y', '-i', bgPath, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-an', outPath]);
-    }
-  }
+  args.push(
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '44100',
+    '-r', '30', '-pix_fmt', 'yuv420p', outPath
+  );
+
+  await new Promise((resolve, reject) => {
+    const ff = spawn('ffmpeg', args);
+    let stderr = '';
+    ff.stderr.on('data', (d) => { stderr += d.toString(); });
+    ff.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg failed ${code}: ${stderr}`)));
+  });
 
   return `/videos/${videoId}.mp4`;
 }
