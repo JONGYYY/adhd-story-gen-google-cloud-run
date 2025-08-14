@@ -1,12 +1,19 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "framework": "nextjs",
   "functions": {
-    "src/app/api/*/route.ts": {
-      "maxDuration": 300
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
     }
+  },
+  "env": {
+    "NEXT_TELEMETRY_DISABLED": "1"
   },
   "build": {
     "env": {
-      "NODE_ENV": "production"
+      "NODE_OPTIONS": "--max-old-space-size=4096"
     }
   }
 } 
