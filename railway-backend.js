@@ -30,14 +30,22 @@ async function ensureVideosDir() {
 // Pick a sample background mp4 to copy
 async function resolveSampleMp4(preferredCategory) {
   const backgroundsRoot = path.join(__dirname, 'public', 'backgrounds');
-  const candidates = [
-    preferredCategory,
-    'minecraft',
+  // Prefer smaller samples first to reduce copy time
+  const orderedBySizeGuess = [
     'subway',
+    'asmr',
     'cooking',
     'workers',
-    'asmr'
+    preferredCategory,
+    'minecraft'
   ].filter(Boolean);
+
+  // De-duplicate while preserving order
+  const seen = new Set();
+  const candidates = orderedBySizeGuess.filter((c) => {
+    if (seen.has(c)) return false;
+    seen.add(c); return true;
+  });
 
   for (const cat of candidates) {
     const candidate = path.join(backgroundsRoot, cat, '1.mp4');
@@ -89,18 +97,20 @@ async function generateVideoSimple(options, videoId) {
     const preferredCategory = options?.background?.category;
     const src = await resolveSampleMp4(preferredCategory);
     if (!src) {
-      console.warn('No sample MP4 found to copy; completing without file');
+      console.warn('No sample MP4 found to copy; keeping status processing until available');
     } else {
       const dest = path.join(videosDir, `${videoId}.mp4`);
       await fsp.copyFile(src, dest);
       console.log(`Copied sample video from ${src} to ${dest}`);
+      videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: `/videos/${videoId}.mp4` });
+      console.log(`Video generation completed for ID: ${videoId}`); // Added log
+      return;
     }
   } catch (copyErr) {
     console.error('Error copying sample mp4:', copyErr);
   }
 
-  videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: `/videos/${videoId}.mp4` });
-  console.log(`Video generation completed for ID: ${videoId}`); // Added log
+  // If we reach here, file not yet available; leave as processing (poller will keep trying)
 }
 
 // Video generation endpoint
