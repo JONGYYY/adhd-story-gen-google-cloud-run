@@ -27,4 +27,8 @@ package.json
 !railway-backend.js
 !railway-package.json
 !nixpacks.toml
-!railway.json 
+!railway.json
+
+# Include static assets required by backend
+!public/
+!public/** 
