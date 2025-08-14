@@ -65,12 +65,12 @@ app.get('/api/health', (req, res) => {
 
 // External background mapping (replace with your own CDN later)
 const EXTERNAL_BG = {
-  minecraft: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  subway: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  cooking: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  workers: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  asmr: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
-  random: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
+  minecraft: process.env.BG_MINECRAFT_URL || 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  subway: process.env.BG_SUBWAY_URL || 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  cooking: process.env.BG_COOKING_URL || 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  workers: process.env.BG_WORKERS_URL || 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  asmr: process.env.BG_ASMR_URL || 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+  random: process.env.BG_RANDOM_URL || 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
 };
 
 // ElevenLabs
@@ -121,16 +121,27 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
     const p = path.join(__dirname, 'public', 'backgrounds', category, '1.mp4');
     return fs.existsSync(p) ? p : null;
   }
-  let bgPath = resolveLocalBg(backgroundCategory) || resolveLocalBg('subway') || resolveLocalBg('minecraft');
-  if (!bgPath) {
-    // Final fallback: download small external clip
-    const external = EXTERNAL_BG.random;
+  // Prefer env-provided remote URL, else local file, else random external fallback
+  const preferredRemote = EXTERNAL_BG[backgroundCategory] || null;
+  let bgPath;
+  if (preferredRemote && preferredRemote.startsWith('http')) {
     const tmpDir = path.join(__dirname, 'tmp');
     await fsp.mkdir(tmpDir, { recursive: true });
     bgPath = path.join(tmpDir, `bg-${videoId}.mp4`);
-    const bgRes = await fetch(external);
+    const bgRes = await fetch(preferredRemote);
     const bgBuf = Buffer.from(await bgRes.arrayBuffer());
     await fsp.writeFile(bgPath, bgBuf);
+  } else {
+    bgPath = resolveLocalBg(backgroundCategory) || resolveLocalBg('subway') || resolveLocalBg('minecraft');
+    if (!bgPath) {
+      const tmpDir = path.join(__dirname, 'tmp');
+      await fsp.mkdir(tmpDir, { recursive: true });
+      bgPath = path.join(tmpDir, `bg-${videoId}.mp4`);
+      const fallback = EXTERNAL_BG.random;
+      const bgRes = await fetch(fallback);
+      const bgBuf = Buffer.from(await bgRes.arrayBuffer());
+      await fsp.writeFile(bgPath, bgBuf);
+    }
   }
 
   // Synthesize TTS (if configured)
