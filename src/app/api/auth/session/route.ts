@@ -12,6 +12,19 @@ const expiresIn = 60 * 60 * 24 * 5 * 1000;
 // Helper to determine if we're in production
 const isProduction = process.env.NODE_ENV === 'production';
 
+function determineCookieDomain(hostHeader: string | null): string | undefined {
+  if (!hostHeader) return undefined;
+  const host = hostHeader.split(':')[0];
+  // For localhost or IPs, omit domain so cookie is host-only
+  if (host === 'localhost' || /^(\d+\.){3}\d+$/.test(host)) return undefined;
+  const parts = host.split('.');
+  if (parts.length >= 2) {
+    const root = parts.slice(-2).join('.');
+    return `.${root}`; // leading dot to allow subdomains
+  }
+  return undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log('Session creation request received');
@@ -56,6 +69,10 @@ export async function POST(request: NextRequest) {
 
     console.log('Session cookie created successfully, length:', sessionCookie.length);
 
+    const hostHeader = request.headers.get('host');
+    const cookieDomain = isProduction ? determineCookieDomain(hostHeader) : undefined;
+    console.log('Resolved cookie domain:', cookieDomain || '(host-only)');
+
     // Set cookie options
     const options = {
       name: 'session',
@@ -65,6 +82,7 @@ export async function POST(request: NextRequest) {
       secure: isProduction,
       path: '/',
       sameSite: 'lax' as const,
+      domain: cookieDomain,
     };
 
     console.log('Cookie options:', {
@@ -73,7 +91,8 @@ export async function POST(request: NextRequest) {
       httpOnly: options.httpOnly,
       secure: options.secure,
       path: options.path,
-      sameSite: options.sameSite
+      sameSite: options.sameSite,
+      domain: options.domain || '(none)'
     });
 
     // Return the session cookie
@@ -85,7 +104,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Set the cookie
-    response.cookies.set(options);
+    response.cookies.set(options as any);
     console.log('Session cookie set in response');
 
     return response;
