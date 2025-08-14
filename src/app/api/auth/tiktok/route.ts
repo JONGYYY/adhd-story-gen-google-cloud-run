@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { TikTokAPI } from '@/lib/social-media/tiktok';
 
 // Prevent static generation
+export const runtime = 'nodejs';
 export const dynamic = "force-dynamic";
 
 export async function GET() {

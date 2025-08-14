@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { YouTubeAPI } from '@/lib/social-media/youtube';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const youtubeApi = new YouTubeAPI();
