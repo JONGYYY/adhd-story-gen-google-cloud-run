@@ -42,12 +42,32 @@ async function getRailwayVideoStatus(videoId: string) {
   const result = await response.json();
   console.log('Railway video status:', JSON.stringify(result, null, 2));
   
-  // Transform Railway response to match our expected format
+  let status = toFrontendStatus(result.status);
+  let progress = typeof result.progress === 'number' ? result.progress : (result.status === 'completed' ? 100 : 0);
+  let videoUrl = result.videoUrl ? `${RAILWAY_API_URL}${result.videoUrl}` : null;
+
+  // Guard: if status is ready but file not yet accessible, keep it generating to let UI retry
+  if (status === 'ready' && videoUrl) {
+    try {
+      const head = await fetch(videoUrl, { method: 'HEAD', cache: 'no-store' });
+      if (!head.ok) {
+        console.warn('Video file not yet available, delaying ready state');
+        status = 'generating';
+        progress = Math.max(progress, 95);
+      }
+    } catch (e) {
+      console.warn('HEAD check failed, delaying ready state');
+      status = 'generating';
+      progress = Math.max(progress, 95);
+    }
+  }
+
+  // Transform to frontend format
   return {
-    status: toFrontendStatus(result.status),
-    progress: typeof result.progress === 'number' ? result.progress : (result.status === 'completed' ? 100 : 0),
+    status,
+    progress,
     error: result.error,
-    videoUrl: result.videoUrl ? `${RAILWAY_API_URL}${result.videoUrl}` : null,
+    videoUrl: status === 'ready' ? videoUrl : null,
   };
 }
 

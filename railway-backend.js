@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const { v4: uuidv4 } = require('uuid');
 
 console.log('Railway backend script started.'); // Added log
@@ -19,6 +20,43 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
+// Ensure videos directory exists
+async function ensureVideosDir() {
+  const videosDir = path.join(__dirname, 'public', 'videos');
+  await fsp.mkdir(videosDir, { recursive: true });
+  return videosDir;
+}
+
+// Pick a sample background mp4 to copy
+async function resolveSampleMp4(preferredCategory) {
+  const backgroundsRoot = path.join(__dirname, 'public', 'backgrounds');
+  const candidates = [
+    preferredCategory,
+    'minecraft',
+    'subway',
+    'cooking',
+    'workers',
+    'asmr'
+  ].filter(Boolean);
+
+  for (const cat of candidates) {
+    const candidate = path.join(backgroundsRoot, cat, '1.mp4');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+
+  // Fallback: scan backgrounds for any 1.mp4
+  try {
+    const dirs = await fsp.readdir(backgroundsRoot);
+    for (const dir of dirs) {
+      const candidate = path.join(backgroundsRoot, dir, '1.mp4');
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  } catch (e) {
+    console.error('Failed to scan backgrounds directory:', e);
+  }
+  return null;
+}
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   console.log('Health check requested.'); // Added log
@@ -35,8 +73,31 @@ async function generateVideoSimple(options, videoId) {
   console.log(`Generating video for ID: ${videoId} with options:`, options); // Added log
   videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
 
-  // Simulate video generation
-  await new Promise(resolve => setTimeout(resolve, 10000)); // Simulate 10 seconds of work
+  // Simulate progress
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  videoStatus.set(videoId, { status: 'processing', progress: 25, message: 'Generating voice-over...' });
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  videoStatus.set(videoId, { status: 'processing', progress: 50, message: 'Compositing video...' });
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  videoStatus.set(videoId, { status: 'processing', progress: 75, message: 'Finalizing...' });
+
+  // Ensure videos directory exists
+  const videosDir = await ensureVideosDir();
+
+  // Copy a sample mp4 to public/videos/<id>.mp4 so it is actually served
+  try {
+    const preferredCategory = options?.background?.category;
+    const src = await resolveSampleMp4(preferredCategory);
+    if (!src) {
+      console.warn('No sample MP4 found to copy; completing without file');
+    } else {
+      const dest = path.join(videosDir, `${videoId}.mp4`);
+      await fsp.copyFile(src, dest);
+      console.log(`Copied sample video from ${src} to ${dest}`);
+    }
+  } catch (copyErr) {
+    console.error('Error copying sample mp4:', copyErr);
+  }
 
   videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: `/videos/${videoId}.mp4` });
   console.log(`Video generation completed for ID: ${videoId}`); // Added log
