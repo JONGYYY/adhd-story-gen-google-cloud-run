@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/navigation-menu';
 import { useAuth } from '@/contexts/auth-context';
 import { LogOut, Settings, User, Menu, X, Zap } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from './utils';
 import {
   Sheet,
   SheetContent,
