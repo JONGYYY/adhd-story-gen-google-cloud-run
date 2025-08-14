@@ -1,4 +1,4 @@
-import ffmpeg from 'fluent-ffmpeg';
+const ffmpeg = require('fluent-ffmpeg') as any;
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { existsSync } from 'fs';
@@ -102,10 +102,10 @@ export class FFmpegProcessor {
           '-r ' + opts.fps, // Force constant frame rate
           '-vsync cfr' // Constant frame rate
         ])
-        .on('start', (commandLine) => {
+        .on('start', (commandLine: string) => {
           console.log(`🔄 Normalizing: ${inputPath}`);
         })
-        .on('progress', (progress) => {
+        .on('progress', (progress: { percent?: number }) => {
           if (progress.percent) {
             process.stdout.write(`\r⏳ Progress: ${Math.round(progress.percent)}%`);
           }
@@ -114,7 +114,7 @@ export class FFmpegProcessor {
           console.log(`\n✅ Normalized: ${outputPath}`);
           resolve();
         })
-        .on('error', (error) => {
+        .on('error', (error: any) => {
           console.error(`\n❌ Normalization failed: ${error.message}`);
           reject(error);
         })
@@ -165,7 +165,7 @@ export class FFmpegProcessor {
           console.log(`✅ Segment created: ${outputPath}`);
           resolve();
         })
-        .on('error', (error) => {
+        .on('error', (error: any) => {
           console.error(`❌ Segment creation failed: ${error.message}`);
           reject(error);
         })
@@ -191,7 +191,7 @@ export class FFmpegProcessor {
           .audioCodec('copy')
           .save(outputPath)
           .on('end', () => resolve())
-          .on('error', (error) => reject(error));
+          .on('error', (error: any) => reject(error));
         return;
       }
       
@@ -216,10 +216,10 @@ export class FFmpegProcessor {
           '-preset fast',
           '-movflags +faststart'
         ])
-        .on('start', (commandLine) => {
+        .on('start', (commandLine: string) => {
           console.log('🔗 Concatenation started');
         })
-        .on('progress', (progress) => {
+        .on('progress', (progress: { percent?: number }) => {
           if (progress.percent) {
             process.stdout.write(`\r⏳ Concatenation: ${Math.round(progress.percent)}%`);
           }
@@ -228,7 +228,7 @@ export class FFmpegProcessor {
           console.log(`\n✅ Background track completed: ${outputPath}`);
           resolve();
         })
-        .on('error', (error) => {
+        .on('error', (error: any) => {
           console.error(`\n❌ Concatenation failed: ${error.message}`);
           reject(error);
         })
@@ -255,17 +255,17 @@ export class FFmpegProcessor {
       const currentAudioLabel = `${i}:a`;
       const outputVideoLabel = `v${i}`;
       const outputAudioLabel = `a${i}`;
-      
+    
       // Video crossfade
       filters.push(
         `[${prevVideoLabel}][${currentVideoLabel}]xfade=transition=fade:duration=${crossfadeDuration}:offset=0[${outputVideoLabel}]`
       );
-      
+    
       // Audio crossfade
       filters.push(
         `[${prevAudioLabel}][${currentAudioLabel}]acrossfade=d=${crossfadeDuration}[${outputAudioLabel}]`
       );
-      
+    
       videoLabel = outputVideoLabel;
       audioLabel = outputAudioLabel;
     }
@@ -278,7 +278,7 @@ export class FFmpegProcessor {
    */
   async getVideoDuration(videoPath: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(videoPath, (error, metadata) => {
+      ffmpeg.ffprobe(videoPath, (error: any, metadata: any) => {
         if (error) {
           reject(error);
           return;
@@ -299,7 +299,7 @@ export class FFmpegProcessor {
    */
   async getVideoMetadata(videoPath: string): Promise<any> {
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(videoPath, (error, metadata) => {
+      ffmpeg.ffprobe(videoPath, (error: any, metadata: any) => {
         if (error) {
           reject(error);
         } else {
