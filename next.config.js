@@ -17,10 +17,20 @@ const nextConfig = {
       ...config.resolve.alias,
       '@': path.join(__dirname, 'src'),
       '@/lib/utils': path.join(__dirname, 'src/lib/utils.ts'),
+      '@/utils/cn': path.join(__dirname, 'src/utils/cn.ts'),
+      // Fix UUID compatibility issue
+      'uuid/v4': 'uuid',
     };
 
     // Ensure extensions are properly resolved
     config.resolve.extensions = ['.tsx', '.ts', '.jsx', '.js', '.json', ...config.resolve.extensions];
+
+    // Add module resolution fallbacks
+    config.resolve.modules = [
+      path.join(__dirname, 'src'),
+      path.join(__dirname, 'node_modules'),
+      ...config.resolve.modules
+    ];
 
     if (!isServer) {
       // Ensure these packages are treated as external on the client side

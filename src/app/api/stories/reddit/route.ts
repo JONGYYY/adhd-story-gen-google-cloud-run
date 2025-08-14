@@ -1,52 +1,42 @@
 export const dynamic = "force-dynamic";
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { fetchRedditStories, SUBREDDIT_CONFIGS } from '@/utils/reddit';
+import { NextRequest, NextResponse } from 'next/server';
+// import Snoowrap from 'snoowrap';
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const subreddit = searchParams.get('subreddit');
-    const timeframe = searchParams.get('timeframe') || 'day';
-    const limit = parseInt(searchParams.get('limit') || '10');
-
-    // Validate subreddit
-    if (subreddit && !Object.keys(SUBREDDIT_CONFIGS).includes(subreddit)) {
-      return NextResponse.json(
-        { error: 'Unsupported subreddit' },
-        { status: 400 }
-      );
-    }
-
-    // Validate timeframe
-    const validTimeframes = ['hour', 'day', 'week', 'month', 'year', 'all'];
-    if (!validTimeframes.includes(timeframe)) {
-      return NextResponse.json(
-        { error: 'Invalid timeframe' },
-        { status: 400 }
-      );
-    }
-
-    // Fetch stories using our utility function
-    const stories = await fetchRedditStories(
-      subreddit || undefined,
-      timeframe as 'hour' | 'day' | 'week' | 'month' | 'year' | 'all',
-      limit
-    );
-
+    // Temporarily disabled Reddit integration due to dependency issues
     return NextResponse.json({
-      stories,
-      metadata: {
-        total: stories.length,
-        timeframe,
-        subreddit: subreddit || 'all'
-      }
+      success: false,
+      error: 'Reddit integration temporarily disabled'
+    }, { status: 503 });
+
+    /* 
+    const r = new Snoowrap({
+      userAgent: process.env.REDDIT_USER_AGENT || 'StoryScrapper/1.0',
+      clientId: process.env.REDDIT_CLIENT_ID!,
+      clientSecret: process.env.REDDIT_CLIENT_SECRET!,
+      refreshToken: process.env.REDDIT_REFRESH_TOKEN!
     });
+
+    const subreddit = r.getSubreddit('AmItheAsshole');
+    const posts = await subreddit.getHot({ limit: 10 });
+    
+    const stories = posts.map(post => ({
+      id: post.id,
+      title: post.title,
+      content: post.selftext,
+      score: post.score,
+      url: post.url,
+      created: post.created_utc
+    }));
+
+    return NextResponse.json({ success: true, stories });
+    */
   } catch (error) {
-    console.error('Error fetching Reddit stories:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch stories' },
-      { status: 500 }
-    );
+    console.error('Reddit API error:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to fetch Reddit stories'
+    }, { status: 500 });
   }
 } 
