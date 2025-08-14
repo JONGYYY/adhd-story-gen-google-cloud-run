@@ -65,6 +65,67 @@ async function resolveSampleMp4(preferredCategory) {
   return null;
 }
 
+// Simple helper: build a demo video by overlaying text on a sample clip
+async function buildDemoVideo({ title, story }, videoId) {
+  const videosDir = await ensureVideosDir();
+  const outPath = path.join(videosDir, `${videoId}.mp4`);
+  const sample = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
+  // Download sample to tmp and then compose
+  const tmpDir = path.join(__dirname, 'tmp');
+  await fsp.mkdir(tmpDir, { recursive: true });
+  const samplePath = path.join(tmpDir, 'sample.mp4');
+
+  // naive fetch
+  const res = await fetch(sample);
+  const buf = Buffer.from(await res.arrayBuffer());
+  await fsp.writeFile(samplePath, buf);
+
+  const overlayTitle = (title || 'Demo Title').replace(/:/g, '\\\:');
+  const overlayStory = (story || 'Demo story line [BREAK] more').replace(/:/g, '\\\:');
+
+  const { spawn } = require('child_process');
+  const drawText = `drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${overlayTitle}':x=(w-text_w)/2:y=H*0.1:fontsize=36:fontcolor=white:box=1:boxcolor=0x00000088,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='${overlayStory}':x=(w-text_w)/2:y=H*0.8:fontsize=24:fontcolor=white:box=1:boxcolor=0x00000088`;
+  await new Promise((resolve, reject) => {
+    const ff = spawn('ffmpeg', ['-y', '-i', samplePath, '-vf', drawText, '-c:a', 'copy', outPath]);
+    ff.stderr.on('data', (d) => process.stderr.write(d));
+    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
+  });
+
+  return `/videos/${videoId}.mp4`;
+}
+
+// Simple video generation function (placeholder)
+async function generateVideoSimple(options, videoId) {
+  console.log(`Generating video for ID: ${videoId} with options:`, options); // Added log
+  videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
+
+  // Simulate progress
+  await new Promise(resolve => setTimeout(resolve, 500));
+  videoStatus.set(videoId, { status: 'processing', progress: 25, message: 'Generating voice-over...' });
+  await new Promise(resolve => setTimeout(resolve, 500));
+  videoStatus.set(videoId, { status: 'processing', progress: 50, message: 'Compositing video...' });
+  await new Promise(resolve => setTimeout(resolve, 500));
+  videoStatus.set(videoId, { status: 'processing', progress: 75, message: 'Finalizing...' });
+
+  try {
+    const videoUrl = await buildDemoVideo({
+      title: options?.customStory?.title,
+      story: options?.customStory?.story,
+    }, videoId);
+
+    videoStatus.set(videoId, {
+      status: 'completed',
+      progress: 100,
+      message: 'Video generation complete.',
+      videoUrl
+    });
+    console.log(`Video generation completed for ID: ${videoId}`);
+  } catch (err) {
+    console.error('Demo ffmpeg build failed:', err);
+    videoStatus.set(videoId, { status: 'failed', error: 'Video build failed' });
+  }
+}
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   console.log('Health check requested.'); // Added log
@@ -75,32 +136,6 @@ app.get('/api/health', (req, res) => {
     service: 'railway-video-backend'
   });
 });
-
-// Simple video generation function (placeholder)
-async function generateVideoSimple(options, videoId) {
-  console.log(`Generating video for ID: ${videoId} with options:`, options); // Added log
-  videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
-
-  // Simulate progress
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  videoStatus.set(videoId, { status: 'processing', progress: 25, message: 'Generating voice-over...' });
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  videoStatus.set(videoId, { status: 'processing', progress: 50, message: 'Compositing video...' });
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  videoStatus.set(videoId, { status: 'processing', progress: 75, message: 'Finalizing...' });
-
-  // Use a stable, small public MP4 so the URL is immediately accessible
-  const externalSampleUrl = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4';
-
-  videoStatus.set(videoId, {
-    status: 'completed',
-    progress: 100,
-    message: 'Video generation complete.',
-    videoUrl: externalSampleUrl
-  });
-
-  console.log(`Video generation completed for ID: ${videoId}`); // Added log
-}
 
 // Video generation endpoint
 app.post('/generate-video', async (req, res) => {
