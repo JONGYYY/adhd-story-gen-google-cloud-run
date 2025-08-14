@@ -12,12 +12,30 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer }) => {
-    // Add explicit alias resolution with absolute path
+    // Add explicit alias resolution with absolute paths for ALL @/lib imports
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.join(__dirname, 'src'),
-      '@/lib/utils': path.join(__dirname, 'src/lib/utils.ts'),
-      '@/utils/cn': path.join(__dirname, 'src/utils/cn.ts'),
+      '@': path.resolve(__dirname, 'src'),
+      '@/lib': path.resolve(__dirname, 'src/lib'),
+      '@/lib/firebase': path.resolve(__dirname, 'src/lib/firebase.ts'),
+      '@/lib/firebase-admin': path.resolve(__dirname, 'src/lib/firebase-admin.ts'),
+      '@/lib/config': path.resolve(__dirname, 'src/lib/config.ts'),
+      '@/lib/utils': path.resolve(__dirname, 'src/lib/utils.ts'),
+      '@/lib/social-media/oauth': path.resolve(__dirname, 'src/lib/social-media/oauth.ts'),
+      '@/lib/social-media/schema': path.resolve(__dirname, 'src/lib/social-media/schema.ts'),
+      '@/lib/social-media/types': path.resolve(__dirname, 'src/lib/social-media/types.ts'),
+      '@/lib/social-media/tiktok': path.resolve(__dirname, 'src/lib/social-media/tiktok.ts'),
+      '@/lib/social-media/youtube': path.resolve(__dirname, 'src/lib/social-media/youtube.ts'),
+      '@/lib/social-media/post': path.resolve(__dirname, 'src/lib/social-media/post.ts'),
+      '@/lib/video-generator': path.resolve(__dirname, 'src/lib/video-generator/index.ts'),
+      '@/lib/video-generator/types': path.resolve(__dirname, 'src/lib/video-generator/types.ts'),
+      '@/lib/video-generator/status': path.resolve(__dirname, 'src/lib/video-generator/status.ts'),
+      '@/lib/video-generator/moviepy-generator': path.resolve(__dirname, 'src/lib/video-generator/moviepy-generator.ts'),
+      '@/lib/video-generator/voice': path.resolve(__dirname, 'src/lib/video-generator/voice.ts'),
+      '@/lib/story-generator/openai': path.resolve(__dirname, 'src/lib/story-generator/openai.ts'),
+      '@/components': path.resolve(__dirname, 'src/components'),
+      '@/contexts': path.resolve(__dirname, 'src/contexts'),
+      '@/app': path.resolve(__dirname, 'src/app'),
       // Fix UUID compatibility issue
       'uuid/v4': 'uuid',
     };
@@ -27,8 +45,8 @@ const nextConfig = {
 
     // Add module resolution fallbacks
     config.resolve.modules = [
-      path.join(__dirname, 'src'),
-      path.join(__dirname, 'node_modules'),
+      path.resolve(__dirname, 'src'),
+      path.resolve(__dirname, 'node_modules'),
       ...config.resolve.modules
     ];
 
