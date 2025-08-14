@@ -13,12 +13,6 @@
   # Additionally omit Next.js build output from scans to avoid false positives
   SECRETS_SCAN_OMIT_PATHS = ".next/**"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200 
+# Use the official Netlify Next.js plugin for proper SSR/ISR routing
+[[plugins]]
+  package = "@netlify/plugin-nextjs" 
