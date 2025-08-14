@@ -37,7 +37,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Python
+# Python - be specific to avoid catching src/lib
 __pycache__/
 *.py[cod]
 *$py.class
@@ -49,7 +49,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Only ignore Python lib directories, not src/lib
+/lib/
 lib64/
 parts/
 sdist/
