@@ -84,12 +84,28 @@ const nextConfig = {
       };
     }
     
+    // Exclude packages directory from webpack bundling
+    config.externals = config.externals || [];
+    if (isServer) {
+      config.externals.push({
+        '../../../packages/alignment/whisper': 'commonjs ../../../packages/alignment/whisper',
+        '../../../packages/banner/generator': 'commonjs ../../../packages/banner/generator',
+        '../../../packages/shared/ffmpeg': 'commonjs ../../../packages/shared/ffmpeg',
+      });
+    }
+    
     // Handle module parsing issues
     config.module.rules.push({
       test: /\.m?js$/,
       resolve: {
         fullySpecified: false,
       },
+    });
+    
+    // Ignore packages directory during build
+    config.module.rules.push({
+      test: /packages\/.*\.(ts|js)$/,
+      use: 'ignore-loader',
     });
     
     // Force resolve symlinks

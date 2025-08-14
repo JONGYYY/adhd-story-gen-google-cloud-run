@@ -9,6 +9,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('🎬 Received Remotion test video generation request:', body);
 
+    // Disable this endpoint during build to avoid webpack issues
+    if (process.env.NODE_ENV === 'production' && !process.env.RAILWAY_ENVIRONMENT) {
+      return NextResponse.json({
+        success: false,
+        error: 'Remotion video generation not available in this environment',
+        videoId
+      }, { status: 503 });
+    }
+
     const { background = 'minecraft' } = body;
 
     // Set initial status
@@ -25,67 +34,60 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       videoId,
-      message: 'Remotion-based video generation started'
+      message: 'Remotion test video generation started'
     });
 
   } catch (error) {
-    console.error('❌ Error in Remotion test video generation API:', error);
+    console.error('❌ Error in Remotion test video generation:', error);
     await setVideoFailed(videoId, error instanceof Error ? error.message : 'Unknown error');
     
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      videoId
+    }, { status: 500 });
   }
 }
 
 async function generateRemotionTestVideo(
-  options: {
-    background: string;
-  },
+  options: { background: string },
   videoId: string
-): Promise<void> {
+) {
+  console.log('🎬 Starting Remotion test video generation for video:', videoId);
+  
   try {
-    console.log('🎬 Starting Remotion test video generation...');
-    await updateProgress(videoId, 5);
-
-    // Create test story data for the production system
-    const renderRequest = {
-      id: videoId,
-      script: "Welcome to the new production-grade video generation system! This demonstrates professional-quality Reddit story videos with CapCut-style bouncing captions, pixel-perfect banners, and seamless background transitions. The system uses Remotion for deterministic frame-based animation and ElevenLabs for high-quality text-to-speech synthesis.",
-      voiceId: 'ErXwobaYiN019PkySvjV', // Antoni voice
-      avatarUrl: 'https://www.redditstatic.com/avatars/defaults/v2/avatar_default_1.png',
-      authorName: 'ProductionTestUser',
-      title: 'Production-Grade Video Generation System Demo',
-      subreddit: 'r/technology',
-      bgClips: [
-        `/backgrounds/${options.background}/1.mp4`,
-        `/backgrounds/${options.background}/2.mp4`,
-        `/backgrounds/${options.background}/3.mp4`
-      ].map(path => `${process.cwd()}/public${path}`),
-      fps: 30,
-      width: 1080,
-      height: 1920
-    } as const;
-
+    // Update progress
     await updateProgress(videoId, 10);
+    console.log('Initializing Remotion renderer...');
 
-    // Dynamically import to avoid bundling native deps during build
+    // Dynamic import to avoid build-time issues
     const { RemotionVideoGenerator } = await import('@/lib/video-generator/remotion-generator');
-
+    
     const generator = new RemotionVideoGenerator();
-    console.log('🎬 Generating video with Remotion production system (fallback on Vercel)...');
-    const result = await generator.generateVideo(renderRequest as any);
+    await generator.initializeRenderer();
     
-    // Set video ready with the result URL
-    await setVideoReady(videoId, result.outputUrl!);
+    // Update progress
+    await updateProgress(videoId, 25);
+    console.log('Generating test content...');
     
-    console.log('✅ Remotion test video generation completed successfully!');
-    console.log(`📹 Video URL: ${result.outputUrl}`);
-
+    const testStory = "This is a test story for Remotion video generation. It should create a simple video with background and text overlay.";
+    
+    // Generate video using Remotion
+    const result = await generator.generateVideo({
+      videoId,
+      story: testStory,
+      background: options.background,
+    });
+    
+    if (result.success && result.videoPath) {
+      await setVideoReady(videoId, result.videoPath);
+      console.log('✅ Remotion test video generated successfully:', result.videoPath);
+    } else {
+      throw new Error(result.error || 'Failed to generate video');
+    }
+    
   } catch (error) {
-    console.error('❌ Error in Remotion test video generation:', error);
-    await setVideoFailed(videoId, error instanceof Error ? error.message : 'Unknown error occurred');
+    console.error('❌ Remotion test video generation failed:', error);
     throw error;
   }
 } 
