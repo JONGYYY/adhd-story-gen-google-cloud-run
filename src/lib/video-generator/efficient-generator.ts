@@ -212,24 +212,103 @@ async function composeEfficientVideo(
   storyDuration: number,
   wordTimestamps: WordTimestamp[]
 ): Promise<void> {
-  // Get background video path
-  const backgroundPath = path.join(process.cwd(), 'public', 'backgrounds', backgroundCategory, '1.mp4');
+  // Resolve background path
+  async function downloadToTmp(url: string, name: string): Promise<string> {
+    const tmpDir = os.tmpdir();
+    const out = path.join(tmpDir, `${name}-${Date.now()}.mp4`);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Failed to download background ${url}: ${resp.status}`);
+    const buf = await resp.arrayBuffer();
+    await fs.writeFile(out, Buffer.from(buf));
+    return out;
+  }
+
+  const BG_URLS: Record<string, string | undefined> = {
+    minecraft: process.env.BG_MINECRAFT_URL,
+    subway: process.env.BG_SUBWAY_URL,
+    cooking: process.env.BG_COOKING_URL,
+    workers: process.env.BG_WORKERS_URL,
+    asmr: process.env.BG_ASMR_URL,
+    random: process.env.BG_RANDOM_URL,
+  };
+
+  let backgroundPath = '';
+  try {
+    const remote = BG_URLS[backgroundCategory];
+    console.log('[BG] category =', backgroundCategory, 'remote url =', remote ? 'set' : 'unset');
+    if (remote && remote.startsWith('http')) {
+      backgroundPath = await downloadToTmp(remote, `bg-${backgroundCategory}`);
+      console.log('[BG] using remote URL ->', backgroundPath);
+    } else {
+      const isProd = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_STATIC_URL || !!process.env.RAILWAY_ENVIRONMENT;
+      if (!isProd) {
+        const localPath = path.join(process.cwd(), 'public', 'backgrounds', backgroundCategory, '1.mp4');
+        try {
+          await fs.access(localPath);
+          backgroundPath = localPath;
+          console.log('[BG] using local public file ->', backgroundPath);
+        } catch {
+          const fallback = BG_URLS.random;
+          if (fallback && fallback.startsWith('http')) {
+            backgroundPath = await downloadToTmp(fallback, 'bg-random');
+            console.log('[BG] local missing; using BG_RANDOM_URL ->', backgroundPath);
+          } else {
+            backgroundPath = await downloadToTmp('https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', 'bg-sample');
+            console.log('[BG] local missing; using sample ->', backgroundPath);
+          }
+        }
+      } else {
+        // In production containers, avoid relying on bundled public assets.
+        const fallback = BG_URLS.random;
+        if (fallback && fallback.startsWith('http')) {
+          backgroundPath = await downloadToTmp(fallback, 'bg-random');
+          console.log('[BG] prod mode; using BG_RANDOM_URL ->', backgroundPath);
+        } else {
+          backgroundPath = await downloadToTmp('https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', 'bg-sample');
+          console.log('[BG] prod mode; using sample ->', backgroundPath);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[BG] error resolving background, falling back to sample:', (e as Error).message);
+    backgroundPath = await downloadToTmp('https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', 'bg-sample2');
+  }
   
-  // Try to find a system font, fallback to no font
-  let fontPath = '';
-  const possibleFonts = [
-    '/System/Library/Fonts/Arial.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-    '/Windows/Fonts/arial.ttf'
-  ];
-  
-  for (const font of possibleFonts) {
-    try {
-      await fs.access(font);
-      fontPath = font;
-      break;
-    } catch (error) {
-      // Font not found, try next
+  // Try to find a system font via fontconfig, fallback to common paths
+  async function resolveFontFile(): Promise<string> {
+    return new Promise((resolve) => {
+      try {
+        const fc = spawn('fc-list', [':', 'file']);
+        let out = '';
+        fc.stdout.on('data', (d) => (out += d.toString()));
+        fc.on('close', () => {
+          const lines = out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          const picked = lines.find((l) => /\.(ttf|ttc|otf)$/i.test(l));
+          if (picked) return resolve(picked);
+          resolve('');
+        });
+        fc.on('error', () => resolve(''));
+      } catch {
+        resolve('');
+      }
+    });
+  }
+
+  let fontPath = await resolveFontFile();
+  if (!fontPath) {
+    const possibleFonts = [
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+      '/System/Library/Fonts/Helvetica.ttc',
+      '/System/Library/Fonts/Arial.ttf',
+      '/Windows/Fonts/arial.ttf'
+    ];
+    for (const font of possibleFonts) {
+      try {
+        await fs.access(font);
+        fontPath = font;
+        break;
+      } catch {}
     }
   }
 
@@ -244,7 +323,7 @@ async function composeEfficientVideo(
     ];
 
     // Create efficient filter complex with animated captions
-    let filterComplex = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=0.1:contrast=1.2:saturation=1.1[bg];[1:v]scale=800:-1[banner_scaled];[bg][banner_scaled]overlay=40:40:enable='between(t,0,${openingDuration})'[with_banner]`;
+    let filterComplex = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=0.1:contrast=1.2:saturation=1.1[bg];[1:v]scale=900:-1[banner_scaled];[bg][banner_scaled]overlay=(main_w-w)/2:(main_h-h)/2+120:enable='between(t,0,${openingDuration})'[with_banner]`;
 
     // Add dyslexic-style one-word captions (inspired by FullyAutomatedRedditVideoMakerBot)
     let currentInput = 'with_banner';
@@ -262,8 +341,8 @@ async function composeEfficientVideo(
       
       // Dyslexic-style caption with bouncing effect
       const drawTextFilter = fontPath 
-        ? `drawtext=fontfile='${fontPath}':text='${cleanText.toUpperCase()}':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=h-400:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${startTime + fadeInDuration}),(t-${startTime})/${fadeInDuration},if(between(t,${endTime - fadeOutDuration},${endTime}),1-(t-${endTime - fadeOutDuration})/${fadeOutDuration},1))':box=1:boxcolor=black@0.7:boxborderw=15:shadowx=3:shadowy=3:shadowcolor=black@0.8`
-        : `drawtext=text='${cleanText.toUpperCase()}':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=h-400:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${startTime + fadeInDuration}),(t-${startTime})/${fadeInDuration},if(between(t,${endTime - fadeOutDuration},${endTime}),1-(t-${endTime - fadeOutDuration})/${fadeOutDuration},1))':box=1:boxcolor=black@0.7:boxborderw=15:shadowx=3:shadowy=3:shadowcolor=black@0.8`;
+        ? `drawtext=fontfile='${fontPath}':text='${cleanText.toUpperCase()}':fontsize=86:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${startTime + fadeInDuration}),(t-${startTime})/${fadeInDuration},if(between(t,${endTime - fadeOutDuration},${endTime}),1-(t-${endTime - fadeOutDuration})/${fadeOutDuration},1))':shadowx=3:shadowy=3:shadowcolor=black@0.8`
+        : `drawtext=fontfile='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf':text='${cleanText.toUpperCase()}':fontsize=86:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${startTime + fadeInDuration}),(t-${startTime})/${fadeInDuration},if(between(t,${endTime - fadeOutDuration},${endTime}),1-(t-${endTime - fadeOutDuration})/${fadeOutDuration},1))':shadowx=3:shadowy=3:shadowcolor=black@0.8`;
       
       filterComplex += `;[${currentInput}]${drawTextFilter}[text_${index}]`;
       currentInput = `text_${index}`;
@@ -283,6 +362,7 @@ async function composeEfficientVideo(
       '-profile:v', 'high',
       '-level', '4.1',
       '-pix_fmt', 'yuv420p',
+      '-shortest',
       '-r', '30',
       '-b:a', '128k', // Efficient audio bitrate
       '-ar', '44100',
@@ -290,9 +370,10 @@ async function composeEfficientVideo(
     );
 
     console.log('🔧 Starting efficient FFmpeg composition...');
+    console.log('[BG] final background path ->', backgroundPath);
     console.log(`📊 Processing ${wordTimestamps.length} animated captions`);
     console.log(`🎵 Audio: ${openingDuration.toFixed(1)}s opening + ${storyDuration.toFixed(1)}s story`);
-    console.log(`🎨 Font: ${fontPath || 'system default'}`);
+    console.log(`🎨 Font: ${fontPath || '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'}`);
 
     const ffmpeg = spawn('ffmpeg', ffmpegArgs);
     

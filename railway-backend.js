@@ -334,27 +334,28 @@ async function generateVideoSimple(options, videoId) {
   }
 }
 
-// Try to load bundled efficient generator if present
+// Always try to build efficient generator at startup with esbuild, then require it
 let efficient;
 try {
+  const esbuild = require('esbuild');
+  console.log('Building efficient generator bundle...');
+  esbuild.buildSync({
+    entryPoints: ['src/lib/video-generator/efficient-generator.ts'],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: 'dist/efficient-generator.js',
+    sourcemap: false
+  });
   efficient = require('./dist/efficient-generator.js');
-  console.log('Efficient generator loaded');
-} catch (e) {
-  console.log('Efficient generator not found; attempting to build with esbuild...');
+  console.log('Efficient generator built and loaded');
+} catch (err) {
   try {
-    const esbuild = require('esbuild');
-    esbuild.buildSync({
-      entryPoints: ['src/lib/video-generator/efficient-generator.ts'],
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      outfile: 'dist/efficient-generator.js',
-      sourcemap: false
-    });
+    console.warn('Build failed or esbuild missing, trying to load existing bundle:', err?.message);
     efficient = require('./dist/efficient-generator.js');
-    console.log('Efficient generator built and loaded');
-  } catch (err) {
-    console.warn('Failed to build efficient generator:', err.message);
+    console.log('Efficient generator loaded from existing bundle');
+  } catch (e2) {
+    console.warn('Efficient generator not available; using inline composer');
     efficient = null;
   }
 }
