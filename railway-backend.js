@@ -181,8 +181,11 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
   // Word timestamps for captions
   const wordTimestamps = buildWordTimestamps(storyDur, storyText);
 
-  // Banner image (overlay during opening). Use existing static banner asset.
-  const bannerPath = path.join(__dirname, 'public', 'banners', 'redditbannertop.png');
+  // Banner image (overlay during opening). Prefer centered card asset
+  let bannerPath = path.join(__dirname, 'public', 'banners', 'redditbannerbottom.png');
+  if (!fs.existsSync(bannerPath)) {
+    bannerPath = path.join(__dirname, 'public', 'banners', 'redditbannertop.png');
+  }
 
   // Font fallback
   let fontPath = '';
@@ -202,7 +205,8 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
   let filter = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=0.05:contrast=1.1:saturation=1.1[bg];`;
   const bannerExists = fs.existsSync(bannerPath);
   if (bannerExists) {
-    filter += `[1:v]scale=800:-1[banner];[bg][banner]overlay=40:40:enable='between(t,0,${openingDur.toFixed(2)})'[v0]`;
+    // Scale banner and center slightly lower than midpoint during opening
+    filter += `[1:v]scale=900:-1[banner];[bg][banner]overlay=(main_w-w)/2:(main_h-h)/2+120:enable='between(t,0,${openingDur.toFixed(2)})'[v0]`;
   } else {
     filter += `[bg]null[v0]`;
   }
@@ -211,9 +215,10 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
     const st = (openingDur + w.start).toFixed(2);
     const en = (openingDur + w.end).toFixed(2);
     const txt = (w.text || '').replace(/'/g, "\\'").replace(/:/g, '\\:');
+    // Centered captions, no box; keep subtle shadow for contrast
     const draw = fontPath
-      ? `drawtext=fontfile='${fontPath}':text='${txt.toUpperCase()}':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=h-380:enable='between(t,${st},${en})':box=1:boxcolor=black@0.65:boxborderw=15:shadowx=3:shadowy=3:shadowcolor=black@0.8`
-      : `drawtext=text='${txt.toUpperCase()}':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=h-380:enable='between(t,${st},${en})':box=1:boxcolor=black@0.65:boxborderw=15:shadowx=3:shadowy=3:shadowcolor=black@0.8`;
+      ? `drawtext=fontfile='${fontPath}':text='${txt.toUpperCase()}':fontsize=86:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${st},${en})':shadowx=3:shadowy=3:shadowcolor=black@0.8`
+      : `drawtext=text='${txt.toUpperCase()}':fontsize=86:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${st},${en})':shadowx=3:shadowy=3:shadowcolor=black@0.8`;
     filter += `;[${current}]${draw}[t${i}]`;
     current = `t${i}`;
   });
@@ -253,15 +258,50 @@ async function buildVideoWithFfmpeg({ title, story, backgroundCategory, voiceAli
   args.push(
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
     '-c:a', 'aac', '-b:a', '128k', '-ar', '44100',
-    '-r', '30', '-pix_fmt', 'yuv420p', outPath
+    '-r', '30', '-pix_fmt', 'yuv420p', '-shortest', outPath
   );
 
-  await new Promise((resolve, reject) => {
-    const ff = spawn('ffmpeg', args);
-    let stderr = '';
-    ff.stderr.on('data', (d) => { stderr += d.toString(); });
-    ff.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg failed ${code}: ${stderr}`)));
-  });
+  console.log('FFMPEG FILTER_COMPLEX =>', filter);
+  console.log('FFMPEG ARGS =>', JSON.stringify(args));
+
+  try {
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', args);
+      let stderr = '';
+      ff.stderr.on('data', (d) => { stderr += d.toString(); });
+      ff.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg failed ${code}: ${stderr}`)));
+    });
+  } catch (err) {
+    console.error('Primary ffmpeg graph failed, falling back to simple compose:', err.message);
+    // Fallback: background + concatenated audio, no banner/captions
+    const fallbackArgs = ['-y', '-i', bgPath];
+    let fallbackAudioIdx = -1;
+    if (openingBuf) { fallbackArgs.push('-i', openingAudio); fallbackAudioIdx = 1; }
+    if (storyBuf) { fallbackArgs.push('-i', storyAudio); }
+
+    const audioInputs = openingBuf && storyBuf ? ['1:a', '2:a'] : (openingBuf ? ['1:a'] : (storyBuf ? ['1:a'] : []));
+    const fallbackFilter = audioInputs.length === 2
+      ? `[${audioInputs[0]}]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100[oa];[${audioInputs[1]}]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100[sa];[oa][sa]concat=n=2:v=0:a=1[aout]`
+      : (audioInputs.length === 1 ? `[${audioInputs[0]}]aformat=sample_fmts=fltp:channel_layouts=stereo,aresample=44100[aout]` : 'anullsrc');
+
+    if (audioInputs.length > 0) {
+      fallbackArgs.push('-filter_complex', fallbackFilter, '-map', '0:v', '-map', '[aout]');
+    } else {
+      fallbackArgs.push('-map', '0:v');
+    }
+
+    fallbackArgs.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-r', '30', '-pix_fmt', 'yuv420p', '-shortest', outPath);
+
+    console.log('FFMPEG FALLBACK FILTER =>', fallbackFilter);
+    console.log('FFMPEG FALLBACK ARGS =>', JSON.stringify(fallbackArgs));
+
+    await new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', fallbackArgs);
+      let stderr = '';
+      ff.stderr.on('data', (d) => { stderr += d.toString(); });
+      ff.on('close', (code) => code === 0 ? resolve() : reject(new Error(`fallback ffmpeg failed ${code}: ${stderr}`)));
+    });
+  }
 
   return `/videos/${videoId}.mp4`;
 }
@@ -294,6 +334,31 @@ async function generateVideoSimple(options, videoId) {
   }
 }
 
+// Try to load bundled efficient generator if present
+let efficient;
+try {
+  efficient = require('./dist/efficient-generator.js');
+  console.log('Efficient generator loaded');
+} catch (e) {
+  console.log('Efficient generator not found; attempting to build with esbuild...');
+  try {
+    const esbuild = require('esbuild');
+    esbuild.buildSync({
+      entryPoints: ['src/lib/video-generator/efficient-generator.ts'],
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      outfile: 'dist/efficient-generator.js',
+      sourcemap: false
+    });
+    efficient = require('./dist/efficient-generator.js');
+    console.log('Efficient generator built and loaded');
+  } catch (err) {
+    console.warn('Failed to build efficient generator:', err.message);
+    efficient = null;
+  }
+}
+
 // Video generation endpoint
 app.post('/generate-video', async (req, res) => {
   try {
@@ -302,7 +367,25 @@ app.post('/generate-video', async (req, res) => {
     const videoId = uuidv4();
 
     // Start video generation in the background
-    generateVideoSimple({ customStory, voice, background, isCliffhanger }, videoId);
+    (async () => {
+      try {
+        if (efficient && efficient.generateVideo) {
+          console.log('Using efficient generator pipeline');
+          const outputPath = await efficient.generateVideo({
+            story: { title: customStory?.title || '', story: customStory?.story || '', subreddit: customStory?.subreddit || 'r/stories', author: customStory?.author || 'Anonymous' },
+            voice,
+            background,
+            isCliffhanger
+          }, videoId);
+          videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: outputPath.replace(/^.*public\//, '/') });
+          return;
+        }
+        await generateVideoSimple({ customStory, voice, background, isCliffhanger }, videoId);
+      } catch (e) {
+        console.error('Background generation failed:', e);
+        videoStatus.set(videoId, { status: 'failed', error: 'Video build failed' });
+      }
+    })();
 
     res.status(202).json({ success: true, message: 'Video generation started.', videoId, statusUrl: `/video-status/${videoId}` });
   } catch (error) {

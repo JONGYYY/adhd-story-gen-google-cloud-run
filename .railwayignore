@@ -14,9 +14,9 @@ src/python/
 *runtime*.txt
 .python-version
 
-# Ignore Next.js files (we only want the Express backend)
+# Ignore Next.js app build-only directories, but include generator code
 .next/
-src/
+# src/           <-- do NOT ignore entire src anymore
 packages/
 apps/
 
@@ -31,4 +31,9 @@ package.json
 
 # Include static assets required by backend
 !public/
-!public/** 
+!public/**
+
+# Include generator sources
+!src/lib/**
+!src/utils/**
+!src/types/** 
