@@ -14,8 +14,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node railway-backend.js",
-    "start:railway": "node railway-backend.js",
+    "start": "next start",
+    "start:railway": "next start",
     "lint": "next lint",
     "render:local": "tsx apps/worker/src/cli.ts"
   },
@@ -38,7 +38,6 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-toast": "^1.2.2",
-    "@radix-ui/react-tooltip": "^1.1.3",
     "@remotion/cli": "^4.0.0",
     "@remotion/lambda": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
