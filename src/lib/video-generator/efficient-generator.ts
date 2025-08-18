@@ -90,7 +90,13 @@ export async function generateVideo(
 
     // Get word timestamps using simple approach
     console.log('⏱️ Getting word timestamps...');
-    const wordTimestamps = await getWordTimestamps(storyAudioPath, storyText);
+    // Build word timestamps for both opening (title) and story, then merge with offsets so captions start at t=0
+    const openingWordTimestamps = await getWordTimestamps(openingAudioPath, openingText);
+    const storyWordTimestampsRaw = await getWordTimestamps(storyAudioPath, storyText);
+    const wordTimestamps = [
+      ...openingWordTimestamps.map(w => ({ ...w })),
+      ...storyWordTimestampsRaw.map(w => ({ ...w, start: w.start + openingDuration, end: w.end + openingDuration }))
+    ];
     await updateProgress(videoId, 60);
 
     // Generate final video with efficient FFmpeg composition
@@ -323,26 +329,35 @@ async function composeEfficientVideo(
     ];
 
     // Create efficient filter complex with animated captions
-    let filterComplex = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=brightness=0.1:contrast=1.2:saturation=1.1[bg];[1:v]scale=900:-1[banner_scaled];[bg][banner_scaled]overlay=(main_w-w)/2:(main_h-h)/2+120:enable='between(t,0,${openingDuration})'[with_banner]`;
+    const grade = 'eq=brightness=0.05:contrast=1.15:saturation=1.05';
+    let filterComplex = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,${grade}[bg];[1:v]scale=900:-1[banner_scaled]`;
+
+    // Banner placement: centered for dev, top-pinned for production
+    const isProd = (process.env.NODE_ENV === 'production');
+    const bannerY = isProd ? '120' : '(main_h-h)/2+120';
+    filterComplex += `;[bg][banner_scaled]overlay=(main_w-w)/2:${bannerY}:enable='between(t,0,${openingDuration})'[with_banner]`;
 
     // Add dyslexic-style one-word captions (inspired by FullyAutomatedRedditVideoMakerBot)
     let currentInput = 'with_banner';
     wordTimestamps.forEach((word, index) => {
-      const startTime = openingDuration + word.start;
-      const endTime = openingDuration + word.end;
+      const startTime = word.start;
+      const endTime = word.end;
       const duration = endTime - startTime;
       
       // Create bouncing animation for each word
-      const fadeInDuration = Math.min(0.15, duration * 0.3);
-      const fadeOutDuration = Math.min(0.15, duration * 0.3);
+      const fadeInDuration = Math.min(0.12, Math.max(0.06, duration * 0.25));
+      const fadeOutDuration = Math.min(0.12, Math.max(0.06, duration * 0.25));
       
       // Clean the word text for FFmpeg
       const cleanText = word.text.replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/:/g, '\\:');
       
-      // Dyslexic-style caption with bouncing effect
+      // Captions at lower third with bounce (y animates from baseY-6 to baseY over fadeInDuration)
+      const baseYExpr = '(h-320-text_h-40)';
+      const bounceYExpr = `(${baseYExpr})- (between(t,${startTime},${(startTime + fadeInDuration).toFixed(2)}) ? 6*(1-((t-${startTime})/${fadeInDuration.toFixed(2)})) : 0)`;
+      const commonStyle = `fontsize=86:fontcolor=white:borderw=3:bordercolor=black@0.5:shadowx=3:shadowy=3:shadowcolor=black@0.8:x=(w-text_w)/2:y=${bounceYExpr}:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${(startTime + fadeInDuration).toFixed(2)}),(t-${startTime})/${fadeInDuration.toFixed(2)},if(between(t,${(endTime - fadeOutDuration).toFixed(2)},${endTime}),1-(t-${(endTime - fadeOutDuration).toFixed(2)})/${fadeOutDuration.toFixed(2)},1))'`;
       const drawTextFilter = fontPath 
-        ? `drawtext=fontfile='${fontPath}':text='${cleanText.toUpperCase()}':fontsize=86:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${startTime + fadeInDuration}),(t-${startTime})/${fadeInDuration},if(between(t,${endTime - fadeOutDuration},${endTime}),1-(t-${endTime - fadeOutDuration})/${fadeOutDuration},1))':shadowx=3:shadowy=3:shadowcolor=black@0.8`
-        : `drawtext=fontfile='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf':text='${cleanText.toUpperCase()}':fontsize=86:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${startTime},${endTime})':alpha='if(between(t,${startTime},${startTime + fadeInDuration}),(t-${startTime})/${fadeInDuration},if(between(t,${endTime - fadeOutDuration},${endTime}),1-(t-${endTime - fadeOutDuration})/${fadeOutDuration},1))':shadowx=3:shadowy=3:shadowcolor=black@0.8`;
+        ? `drawtext=fontfile='${fontPath}':text='${cleanText.toUpperCase()}':${commonStyle}`
+        : `drawtext=fontfile='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf':text='${cleanText.toUpperCase()}':${commonStyle}`;
       
       filterComplex += `;[${currentInput}]${drawTextFilter}[text_${index}]`;
       currentInput = `text_${index}`;
@@ -357,15 +372,16 @@ async function composeEfficientVideo(
       '-map', '[final_audio]',
       '-c:v', 'libx264',
       '-c:a', 'aac',
-      '-preset', 'fast', // Faster encoding
-      '-crf', '25', // Good quality but efficient
+      '-preset', 'fast',
+      '-crf', '20',
       '-profile:v', 'high',
       '-level', '4.1',
       '-pix_fmt', 'yuv420p',
-      '-shortest',
+      '-movflags', '+faststart',
       '-r', '30',
       '-b:a', '128k', // Efficient audio bitrate
       '-ar', '44100',
+      '-t', (openingDuration + storyDuration + 1.5).toFixed(2),
       outputPath
     );
 
