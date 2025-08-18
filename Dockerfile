@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Base Node image ---
-FROM node:20-bullseye AS base
+FROM node:22-bullseye AS base
 
 # Install system dependencies: ffmpeg, python3, venv, build tools
 RUN apt-get update && \
