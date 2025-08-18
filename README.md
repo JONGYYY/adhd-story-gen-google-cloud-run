@@ -57,50 +57,67 @@ Quick start:
 
 See the project documentation and `env.railway.template` for required environment variables.
 
-## Deploying on Google Cloud Run
+## Deploying on DigitalOcean
 
-1. Build and push the container (Artifact Registry recommended):
+### Option A: App Platform (build from repository)
+1) Push this repo to GitHub (already done: `adhd-story-gen-google-cloud-run`).
+2) In DigitalOcean: Apps → Create App → Connect GitHub → select the repo and branch (`gcr-migration`).
+3) Autodetect Dockerfile. Set Environment Variables:
+   - Required now: `OPENAI_API_KEY`
+   - Optional: `NEXT_PUBLIC_APP_URL` (App Platform URL), Firebase, Reddit, TikTok, YouTube as needed
+4) Expose HTTP on `${PORT}` (App Platform injects `PORT`). The Dockerfile already uses `${PORT:-8080}`.
+5) Set resources: 2 vCPUs / 2–4 GB RAM recommended for video rendering.
+6) Deploy. After deploy, set `NEXT_PUBLIC_APP_URL` to the app’s URL and redeploy.
 
+### Option B: Container Registry + App Platform
+1) Build and push image to DigitalOcean Container Registry:
 ```bash
-PROJECT_ID="your-gcp-project"
-REGION="us-central1"
-REPO="adhd-story-gen"
-IMAGE="gcr.io/$PROJECT_ID/$REPO/web"
+doctl auth init  # if not already authenticated
+REGISTRY=registry.digitalocean.com/your-reg
+APP_IMAGE="$REGISTRY/adhd-story-gen:web"
 
-# Enable required services
-#gcloud services enable run.googleapis.com artifactregistry.googleapis.com
+doctl registry create your-reg || true
+# Login docker to DOCR
+DO_TOKEN=$(doctl auth token)
+echo $DO_TOKEN | docker login -u doctl --password-stdin registry.digitalocean.com
 
-# Create repo if needed
-#gcloud artifacts repositories create $REPO --repository-format=docker --location=$REGION --description="ADHD Story Gen"
-
-# Build and push
-cd /Users/jonathanshan/adhd-story-gen-gcr
-gcloud builds submit --tag "$IMAGE"
+docker build -t "$APP_IMAGE" .
+docker push "$APP_IMAGE"
 ```
+2) Create an App from the image in the DO dashboard or with `doctl apps create` using a spec.
 
-2. Deploy to Cloud Run:
-
+### doctl app spec
+Create `do-app.yaml` and apply:
+```yaml
+name: adhd-story-gen
+region: nyc
+services:
+  - name: web
+    image:
+      registry_type: DOCR
+      repository: adhd-story-gen
+      tag: web
+      registry: your-reg
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxl
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: OPENAI_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        value: "YOUR_OPENAI_KEY"
+      - key: NEXT_PUBLIC_APP_URL
+        value: "https://placeholder"
+```
+Apply:
 ```bash
-gcloud run deploy adhd-story-gen \
-  --image="$IMAGE" \
-  --region="$REGION" \
-  --platform=managed \
-  --allow-unauthenticated \
-  --memory=2Gi \
-  --cpu=2 \
-  --port=8080 \
-  --max-instances=3 \
-  --set-env-vars=NODE_ENV=production,NEXT_TELEMETRY_DISABLED=1,FORCE_RAILWAY=false \
-  --set-env-vars=OPENAI_API_KEY=secret,ELEVENLABS_API_KEY=secret \
-  --set-env-vars=NEXT_PUBLIC_APP_URL=https://YOUR_CLOUD_RUN_URL \
-  --set-env-vars=NEXT_PUBLIC_FIREBASE_API_KEY=...,NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...,NEXT_PUBLIC_FIREBASE_PROJECT_ID=... \
-  --set-env-vars=FIREBASE_ADMIN_PROJECT_ID=...,FIREBASE_ADMIN_CLIENT_EMAIL=...,FIREBASE_ADMIN_PRIVATE_KEY='-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n' \
-  --set-env-vars=REDDIT_CLIENT_ID=...,REDDIT_CLIENT_SECRET=...,REDDIT_REFRESH_TOKEN=...
+doctl apps create --spec do-app.yaml
 ```
-
-3. Optional: custom domain mapping for the Cloud Run service.
 
 Notes:
-- The container includes ffmpeg and a Python venv with MoviePy/Whisper. Heavy GPU isn’t used; CPU rendering is slower.
-- Set `FORCE_RAILWAY=true` if you still want to delegate video generation to Railway temporarily.
-- Videos are stored in the instance’s tmp and streamed via `/api/videos/:filename`. Consider integrating GCS for durable storage later.
+- Dockerfile includes ffmpeg and Python venv for MoviePy/Whisper; CPU rendering only.
+- Videos are streamed from tmp via `/api/videos/:filename`. Consider Spaces for storage later.
+- Set `NEXT_PUBLIC_APP_URL` to the final app URL after first deploy.

@@ -1,0 +1,22 @@
+name: adhd-story-gen
+region: nyc
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    git:
+      repo_clone_url: https://github.com/JONGYYY/adhd-story-gen-google-cloud-run.git
+      branch: gcr-migration
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxl
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: OPENAI_API_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        value: ""
+      - key: NEXT_PUBLIC_APP_URL
+        value: "https://placeholder" 
