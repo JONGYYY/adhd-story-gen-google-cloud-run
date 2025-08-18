@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.vercel
+.vscode
+.DS_Store
+*.log
+coverage
+build
+out
+.tmp
+venv
+__pycache__
+*.py[cod]
+public/videos
+/tmp 
