@@ -71,5 +71,5 @@ EXPOSE 8080
 # Next.js expects PORT
 ENV PORT=8080
 
-# Use dynamic $PORT if provided by the platform
-CMD ["sh", "-c", "npm run start -- -p ${PORT:-8080}"] 
+# Use dynamic $PORT and bind to 0.0.0.0 for platform healthchecks
+CMD ["sh", "-c", "npm run start -- -p ${PORT:-8080} -H 0.0.0.0"] 
