@@ -362,37 +362,49 @@ try {
 
 // Video generation endpoint
 app.post('/generate-video', async (req, res) => {
-  try {
-    console.log('Received video generation request.'); // Added log
-    const { customStory, voice, background, isCliffhanger } = req.body;
-    const videoId = uuidv4();
+	try {
+		console.log('Received video generation request.'); // Added log
+		const { customStory, voice, background, isCliffhanger } = req.body;
+		const videoId = uuidv4();
 
-    // Start video generation in the background
-    (async () => {
-      try {
-        if (efficient && efficient.generateVideo) {
-          console.log('Using efficient generator pipeline');
-          const outputPath = await efficient.generateVideo({
-            story: { title: customStory?.title || '', story: customStory?.story || '', subreddit: customStory?.subreddit || 'r/stories', author: customStory?.author || 'Anonymous' },
-            voice,
-            background,
-            isCliffhanger
-          }, videoId);
-          videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: outputPath.replace(/^.*public\//, '/') });
-          return;
-        }
-        await generateVideoSimple({ customStory, voice, background, isCliffhanger }, videoId);
-      } catch (e) {
-        console.error('Background generation failed:', e);
-        videoStatus.set(videoId, { status: 'failed', error: 'Video build failed' });
-      }
-    })();
+		// Set initial processing status so /video-status does not 404
+		videoStatus.set(videoId, { status: 'processing', progress: 0, message: 'Video generation started.' });
 
-    res.status(202).json({ success: true, message: 'Video generation started.', videoId, statusUrl: `/video-status/${videoId}` });
-  } catch (error) {
-    console.error('Video generation error:', error); // Added log
-    res.status(500).json({ success: false, error: error.message || 'Failed to start video generation' });
-  }
+		// Start video generation in the background
+		(async () => {
+			try {
+				if (efficient && efficient.generateVideo) {
+					console.log('Using efficient generator pipeline');
+					const tmpOutputPath = await efficient.generateVideo({
+						story: { title: customStory?.title || '', story: customStory?.story || '', subreddit: customStory?.subreddit || 'r/stories', author: customStory?.author || 'Anonymous' },
+						voice,
+						background,
+						isCliffhanger
+					}, videoId);
+					// Move/copy final file into public/videos so it can be served
+					const videosDir = await ensureVideosDir();
+					const finalPath = path.join(videosDir, `${videoId}.mp4`);
+					try {
+						await fsp.copyFile(tmpOutputPath, finalPath);
+					} catch (copyErr) {
+						console.warn('Copy tmp output failed, attempting rename:', copyErr?.message);
+						try { await fsp.rename(tmpOutputPath, finalPath); } catch (renameErr) { console.error('Rename also failed:', renameErr?.message); }
+					}
+					videoStatus.set(videoId, { status: 'completed', progress: 100, message: 'Video generation complete.', videoUrl: `/videos/${videoId}.mp4` });
+					return;
+				}
+				await generateVideoSimple({ customStory, voice, background, isCliffhanger }, videoId);
+			} catch (e) {
+				console.error('Background generation failed:', e);
+				videoStatus.set(videoId, { status: 'failed', error: 'Video build failed' });
+			}
+		})();
+
+		res.status(202).json({ success: true, message: 'Video generation started.', videoId, statusUrl: `/video-status/${videoId}` });
+	} catch (error) {
+		console.error('Video generation error:', error); // Added log
+		res.status(500).json({ success: false, error: error.message || 'Failed to start video generation' });
+	}
 });
 
 // Video status endpoint
