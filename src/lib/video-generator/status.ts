@@ -15,69 +15,82 @@ async function ensureStatusDir() {
   await fs.mkdir(STATUS_DIR, { recursive: true });
 }
 
-export async function createVideoStatus(videoId: string) {
+async function writeStatusAtomic(videoId: string, data: any): Promise<void> {
   await ensureStatusDir();
   const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  await fs.writeFile(statusFile, JSON.stringify({
+  const tempFile = statusFile + '.tmp';
+  const payload = JSON.stringify(data);
+  // Write to temp then rename for atomic swap
+  await fs.writeFile(tempFile, payload);
+  await fs.rename(tempFile, statusFile);
+}
+
+async function readStatusWithRetry(videoId: string, retries = 3, delayMs = 20): Promise<any> {
+  await ensureStatusDir();
+  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const text = await fs.readFile(statusFile, 'utf-8');
+      return JSON.parse(text);
+    } catch (error: any) {
+      if (error && error.code === 'ENOENT') {
+        return { status: 'not_found' };
+      }
+      if (attempt < retries) {
+        await new Promise(res => setTimeout(res, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+  return { status: 'not_found' };
+}
+
+export async function createVideoStatus(videoId: string) {
+  await writeStatusAtomic(videoId, {
     status: 'generating',
     progress: 0,
-    createdAt: Date.now()
-  }));
+    createdAt: Date.now(),
+  });
 }
 
 export async function setVideoGenerating(videoId: string) {
-  await ensureStatusDir();
-  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  await fs.writeFile(statusFile, JSON.stringify({
+  await writeStatusAtomic(videoId, {
     status: 'generating',
     progress: 0,
-    createdAt: Date.now()
-  }));
+    createdAt: Date.now(),
+  });
 }
 
 export async function updateProgress(videoId: string, progress: number) {
-  await ensureStatusDir();
-  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  const status = await getVideoStatus(videoId);
-  await fs.writeFile(statusFile, JSON.stringify({
+  const status = await readStatusWithRetry(videoId);
+  await writeStatusAtomic(videoId, {
     ...status,
-    progress
-  }));
+    status: 'generating',
+    progress,
+    updatedAt: Date.now(),
+  });
 }
 
 export async function setVideoReady(videoId: string, videoUrl: string) {
-  await ensureStatusDir();
-  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  await fs.writeFile(statusFile, JSON.stringify({
+  await writeStatusAtomic(videoId, {
     status: 'ready',
     progress: 100,
     videoUrl,
-    completedAt: Date.now()
-  }));
+    completedAt: Date.now(),
+  });
 }
 
 export async function setVideoFailed(videoId: string, error: string) {
-  await ensureStatusDir();
-  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  await fs.writeFile(statusFile, JSON.stringify({
+  await writeStatusAtomic(videoId, {
     status: 'failed',
     error,
-    failedAt: Date.now()
-  }));
+    failedAt: Date.now(),
+  });
 }
 
 export async function getVideoStatus(videoId: string) {
-  await ensureStatusDir();
-  const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  try {
-    const data = await fs.readFile(statusFile, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-      return { status: 'not_found' };
-    }
-    throw error;
-  }
+  return readStatusWithRetry(videoId);
 }
 
 // Clean up old status files (older than 24 hours)
