@@ -2,7 +2,6 @@
   "name": "adhd-story-gen",
   "version": "0.1.0",
   "private": true,
-  "main": "railway-backend.js",
   "engines": {
     "node": "22.x",
     "npm": ">=8.0.0"
