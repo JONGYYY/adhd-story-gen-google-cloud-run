@@ -109,6 +109,27 @@ export class MoviePyEngine implements IVideoEngine {
 					bannerAssets
 				};
 
+				// Ensure background exists or create a simple placeholder loop via ffmpeg
+				try {
+					await fs.access(jobConfig.bgSpec.clips[0]);
+					console.log('🎞️ Background clip found:', jobConfig.bgSpec.clips[0]);
+				} catch {
+					console.warn('⚠️ Background clip missing. Generating placeholder background...');
+					const placeholderPath = path.join(jobDir, 'bg_placeholder.mp4');
+					await new Promise<void>((resolve, reject) => {
+						const ffmpeg = spawn('ffmpeg', [
+							'-f','lavfi','-i','color=c=black:s=1080x1920:r=30',
+							'-t','10',
+							'-vf','drawgrid=width=200:height=200:color=white@0.2:thickness=2',
+							'-c:v','libx264','-pix_fmt','yuv420p',
+							placeholderPath
+						]);
+						ffmpeg.on('close',(code)=> code===0?resolve():reject(new Error(`ffmpeg exited ${code}`)));
+						ffmpeg.on('error',(err)=>reject(err));
+					});
+					jobConfig.bgSpec.clips[0] = placeholderPath;
+				}
+
 				// Copy story files to expected locations
 				console.log(`📋 Copying files:`);
 				console.log(`   From: ${storyResult.audioPath} -> ${jobConfig.ttsPath}`);
