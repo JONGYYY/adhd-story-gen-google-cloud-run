@@ -103,7 +103,7 @@ class EnhancedVideoGenerator:
         img_width = text_width + padding * 2
         img_height = text_height + padding * 2
         
-        # Create image
+        # Create RGBA image
         img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
@@ -121,56 +121,27 @@ class EnhancedVideoGenerator:
         fill_color = style.get('fill', '#FFFFFF')
         draw.text((padding, padding), word, font=font, fill=fill_color)
         
-        # Convert to numpy array for MoviePy
-        img_array = np.array(img)
+        # Convert to numpy arrays: RGB + alpha mask
+        rgba_array = np.array(img)
+        rgb_array = rgba_array[:, :, :3]
+        alpha_mask = rgba_array[:, :, 3].astype(np.float32) / 255.0
         
-        # Create ImageClip
-        def make_frame(t):
-            # Bouncing animation
-            bounce_px = style.get('bouncePx', 8)
-            bounce_duration = 0.2  # 200ms bounce
-            
-            if t < bounce_duration:
-                # Ease out back animation
-                progress = t / bounce_duration
-                # Overshoot and settle
-                bounce_factor = 1.0 + 0.3 * (1 - progress) * np.sin(progress * np.pi * 3)
-                y_offset = -bounce_px * (1 - progress) * bounce_factor
-                scale = 1.0 + 0.08 * (1 - progress)  # Scale from 1.08 to 1.0
-            else:
-                y_offset = 0
-                scale = 1.0
-            
-            # Apply transformations
-            frame = img_array.copy()
-            if scale != 1.0:
-                h, w = frame.shape[:2]
-                new_h, new_w = int(h * scale), int(w * scale)
-                frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
-                
-                # Center the scaled image
-                if scale > 1.0:
-                    # Crop to original size
-                    start_y = (new_h - h) // 2
-                    start_x = (new_w - w) // 2
-                    frame = frame[start_y:start_y+h, start_x:start_x+w]
-                else:
-                    # Pad to original size
-                    pad_y = (h - new_h) // 2
-                    pad_x = (w - new_w) // 2
-                    frame = np.pad(frame, ((pad_y, h-new_h-pad_y), (pad_x, w-new_w-pad_x), (0, 0)), 
-                                 mode='constant', constant_values=0)
-            
-            return frame
+        # Create ImageClip with mask and apply simple bounce scale
+        base_clip = ImageClip(rgb_array).set_duration(duration)
+        base_clip = base_clip.set_mask(ImageClip(alpha_mask, ismask=True).set_duration(duration))
         
-        caption_clip = VideoClip(make_frame, duration=duration)
+        bounce_duration = 0.2
+        def scale_at_time(t):
+            p = max(0.0, min(1.0, t / bounce_duration))
+            return 1.0 + 0.08 * (1.0 - p)
+        animated_clip = base_clip.resize(scale_at_time)
         
         # Position at bottom center of video
         video_width, video_height = video_size
         caption_x = (video_width - img_width) // 2
-        caption_y = video_height - 200  # 200px from bottom
+        caption_y = video_height - 200
         
-        return caption_clip.set_position((caption_x, caption_y))
+        return animated_clip.set_position((caption_x, caption_y))
 
     def create_word_captions(self, alignment_data: list, video_size: tuple, style: dict = None) -> list:
         """Create caption clips for all words with proper timing"""
@@ -248,7 +219,13 @@ class EnhancedVideoGenerator:
                     banner_img = banner_img.convert('RGBA')
                     logger.info("Converted banner to RGBA for transparency")
                 
-                banner_clip = ImageClip(banner_path, duration=total_duration)
+                # Split into RGB + mask to avoid 4-channel broadcasting
+                banner_rgba = np.array(banner_img)
+                banner_rgb = banner_rgba[:, :, :3]
+                banner_alpha = banner_rgba[:, :, 3].astype(np.float32) / 255.0
+                
+                banner_clip = ImageClip(banner_rgb, duration=total_duration)
+                banner_clip = banner_clip.set_mask(ImageClip(banner_alpha, ismask=True).set_duration(total_duration))
                 
                 # Scale banner appropriately
                 banner_width = int(target_width * 0.9)  # 90% of video width
