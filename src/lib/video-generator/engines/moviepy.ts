@@ -1,5 +1,5 @@
 import { IVideoEngine, GenerateVideoInput, GenerateResult, JobConfig } from './types';
-import { generateTTSAndAlignment } from '../shared/audio';
+import { generateTTSAndAlignment, generateTitleAndStoryAudio } from '../shared/audio';
 import { getBannerAssets } from '../shared/banner';
 import { updateProgress } from '../status';
 import { spawn } from 'child_process';
@@ -18,6 +18,21 @@ async function resolvePythonPath(): Promise<string> {
 		return venvPath;
 	} catch {
 		return 'python3';
+	}
+}
+
+async function downloadDefaultBackground(targetPath: string): Promise<boolean> {
+	const url = process.env.DEFAULT_BACKGROUND_URL;
+	if (!url) return false;
+	try {
+		const res = await fetch(url, { cache: 'no-store' });
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const arr = await res.arrayBuffer();
+		await fs.writeFile(targetPath, Buffer.from(arr));
+		return true;
+	} catch (e) {
+		console.warn('Failed to download DEFAULT_BACKGROUND_URL:', e);
+		return false;
 	}
 }
 
@@ -74,48 +89,58 @@ export class MoviePyEngine implements IVideoEngine {
 			await fs.mkdir(jobDir, { recursive: true });
 			console.log(`📁 Created job directory: ${jobDir}`);
 
-			// Generate story audio (simplified - just use story for now)
 			await updateProgress(jobId, 10);
 			console.log('🎙️ Generating story audio...');
 			console.log(`📝 Story text: "${input.customStory.story.substring(0, 100)}..."`);
 			
+			// Generate title and story audio separately
+			const voiceRequest = { provider: input.voice.provider, voiceId: input.voice.voiceId } as any;
+			const titleStory = await generateTitleAndStoryAudio(
+				input.customStory.title,
+				input.customStory.story,
+				voiceRequest,
+				`${jobId}`
+			);
+
+			console.log(`✅ TTS generated successfully:`);
+			console.log(`   Title audio: ${titleStory.titleAudio.path}`);
+			console.log(`   Story audio: ${titleStory.storyAudio.path}`);
+			console.log(`   Story duration: ${titleStory.storyAudio.duration}s`);
+
+			await updateProgress(jobId, 30);
+
+			// Get banner assets
+			const bannerAssets = await getBannerAssets();
+			console.log(`🎨 Banner assets loaded: ${bannerAssets.topPath}, ${bannerAssets.bottomPath}`);
+
+			// Create job configuration
+			const jobConfig: JobConfig = {
+				jobId,
+				input,
+				alignmentPath: path.join(jobDir, 'story_align.json'),
+				ttsPath: path.join(jobDir, 'story_audio.wav'), // not used in enhanced now
+				bgSpec: {
+					clips: [path.join(process.cwd(), 'public', 'backgrounds', input.background.category, '1.mp4')],
+					switchSeconds: input.background.switchSeconds || 5
+				},
+				bannerAssets
+			};
+
+			// Ensure background exists or create/download a simple placeholder
+			const expectedBgPath = jobConfig.bgSpec.clips[0];
+			console.log(`🔍 Checking for background at: ${expectedBgPath}`);
+			
 			try {
-				const storyResult = await generateTTSAndAlignment(
-					input.customStory.story,
-					input.voice,
-					jobId
-				);
-				console.log(`✅ TTS generated successfully:`);
-				console.log(`   Audio path: ${storyResult.audioPath}`);
-				console.log(`   Alignment path: ${storyResult.alignmentPath}`);
-				console.log(`   Duration: ${storyResult.duration}s`);
-
-				await updateProgress(jobId, 30);
-
-				// Get banner assets
-				const bannerAssets = await getBannerAssets();
-				console.log(`🎨 Banner assets loaded: ${bannerAssets.topPath}, ${bannerAssets.bottomPath}`);
-
-				// Create job configuration
-				const jobConfig: JobConfig = {
-					jobId,
-					input,
-					alignmentPath: path.join(jobDir, 'story_align.json'),
-					ttsPath: path.join(jobDir, 'story_audio.wav'),
-					bgSpec: {
-						clips: [path.join(process.cwd(), 'public', 'backgrounds', input.background.category, '1.mp4')],
-						switchSeconds: input.background.switchSeconds || 5
-					},
-					bannerAssets
-				};
-
-				// Ensure background exists or create a simple placeholder loop via ffmpeg
-				try {
-					await fs.access(jobConfig.bgSpec.clips[0]);
-					console.log('🎞️ Background clip found:', jobConfig.bgSpec.clips[0]);
-				} catch {
-					console.warn('⚠️ Background clip missing. Generating placeholder background...');
-					const placeholderPath = path.join(jobDir, 'bg_placeholder.mp4');
+				const bgStats = await fs.stat(expectedBgPath);
+				console.log(`🎞️ Background clip found: ${expectedBgPath} (${bgStats.size} bytes)`);
+			} catch (bgError) {
+				console.warn(`⚠️ Background clip missing at ${expectedBgPath}:`, bgError);
+				console.warn('⚠️ Generating placeholder background...');
+				const placeholderPath = path.join(jobDir, 'bg_placeholder.mp4');
+				// Try download first
+				const downloaded = await downloadDefaultBackground(placeholderPath);
+				if (!downloaded) {
+					console.log('📹 Creating grid placeholder background...');
 					await new Promise<void>((resolve, reject) => {
 						const ffmpeg = spawn('ffmpeg', [
 							'-f','lavfi','-i','color=c=black:s=1080x1920:r=30',
@@ -127,56 +152,34 @@ export class MoviePyEngine implements IVideoEngine {
 						ffmpeg.on('close',(code)=> code===0?resolve():reject(new Error(`ffmpeg exited ${code}`)));
 						ffmpeg.on('error',(err)=>reject(err));
 					});
-					jobConfig.bgSpec.clips[0] = placeholderPath;
 				}
-
-				// Copy story files to expected locations
-				console.log(`📋 Copying files:`);
-				console.log(`   From: ${storyResult.audioPath} -> ${jobConfig.ttsPath}`);
-				console.log(`   From: ${storyResult.alignmentPath} -> ${jobConfig.alignmentPath}`);
-				
-				// Check if source files exist before copying
-				const audioExists = await fs.access(storyResult.audioPath).then(() => true).catch(() => false);
-				const alignExists = await fs.access(storyResult.alignmentPath).then(() => true).catch(() => false);
-				
-				console.log(`   Audio file exists: ${audioExists}`);
-				console.log(`   Alignment file exists: ${alignExists}`);
-				
-				if (!audioExists) {
-					throw new Error(`Audio file not found: ${storyResult.audioPath}`);
-				}
-				if (!alignExists) {
-					throw new Error(`Alignment file not found: ${storyResult.alignmentPath}`);
-				}
-				
-				await fs.copyFile(storyResult.audioPath, jobConfig.ttsPath);
-				await fs.copyFile(storyResult.alignmentPath, jobConfig.alignmentPath);
-				console.log(`✅ Files copied successfully`);
-				
-				await updateProgress(jobId, 40);
-
-				// Create banner using existing Python script
-				const bannerPath = await this.createBanner(jobConfig);
-				await updateProgress(jobId, 50);
-
-				// Generate final video
-				const outputPath = await this.generateVideo(jobConfig, bannerPath);
-				await updateProgress(jobId, 90);
-
-				// Move to public directory
-				const finalPath = await this.moveToPublic(outputPath, jobId);
-				await updateProgress(jobId, 100);
-
-				console.log('✅ MoviePy video generation completed');
-				return {
-					videoId: jobId,
-					url: `/api/videos/output_${jobId}.mp4`
-				};
-			} catch (ttsError) {
-				console.error('❌ TTS generation failed:', ttsError);
-				throw new Error(`TTS generation failed: ${ttsError instanceof Error ? ttsError.message : 'Unknown TTS error'}`);
+				jobConfig.bgSpec.clips[0] = placeholderPath;
+				console.log(`✅ Using placeholder background: ${placeholderPath}`);
 			}
 
+			// Copy story alignment to expected location
+			await fs.writeFile(jobConfig.alignmentPath, JSON.stringify(titleStory.storyAudio.alignment, null, 2)).catch(()=>{});
+			console.log(`✅ Files copied successfully`);
+			
+			await updateProgress(jobId, 40);
+
+			// Create banner using existing Python script
+			const bannerPath = await this.createBanner(jobConfig);
+			await updateProgress(jobId, 50);
+
+			// Generate final video using enhanced script with title+story
+			const outputPath = await this.generateVideo(jobConfig, bannerPath, titleStory.titleAudio.path, titleStory.storyAudio.path);
+			await updateProgress(jobId, 90);
+
+			// Move to public directory
+			const finalPath = await this.moveToPublic(outputPath, jobId);
+			await updateProgress(jobId, 100);
+
+			console.log('✅ MoviePy video generation completed');
+			return {
+				videoId: jobId,
+				url: `/api/videos/output_${jobId}.mp4`
+			};
 		} catch (error) {
 			console.error('❌ MoviePy video generation failed:', error);
 			throw error;
@@ -223,11 +226,11 @@ export class MoviePyEngine implements IVideoEngine {
 		return bannerPath;
 	}
 
-	private async generateVideo(jobConfig: JobConfig, bannerPath: string): Promise<string> {
+	private async generateVideo(jobConfig: JobConfig, bannerPath: string, titleAudioPath: string | null, storyAudioPath: string): Promise<string> {
 		const outputPath = path.join(path.dirname(jobConfig.ttsPath), `output_${jobConfig.jobId}.mp4`);
 		const videoScriptPath = path.join(process.cwd(), 'src', 'python', 'enhanced_generate_video.py');
 		
-		// Create enhanced Python script arguments
+		// Create story data for informational purposes
 		const storyData = {
 			title: jobConfig.input.customStory.title,
 			story: jobConfig.input.customStory.story,
@@ -241,12 +244,13 @@ export class MoviePyEngine implements IVideoEngine {
 			const pythonProcess = spawn(pythonPath, [
 				videoScriptPath,
 				jobConfig.jobId,
-				jobConfig.ttsPath,    // Combined audio
-				jobConfig.bgSpec.clips[0], // Background video
-				bannerPath,           // Custom banner
-				outputPath,           // Output path
+				titleAudioPath ? titleAudioPath : 'NONE',
+				storyAudioPath,
+				jobConfig.bgSpec.clips[0],
+				bannerPath,
+				outputPath,
 				JSON.stringify(storyData),
-				jobConfig.alignmentPath // Word alignment
+				jobConfig.alignmentPath
 			]);
 
 			let stdout = '';
@@ -255,12 +259,10 @@ export class MoviePyEngine implements IVideoEngine {
 			pythonProcess.stdout.on('data', (data) => {
 				stdout += data.toString();
 				console.log(`Video Python stdout: ${data}`);
-				
-				// Parse progress if available
 				const progressMatch = data.toString().match(/PROGRESS (\d+)/);
 				if (progressMatch) {
 					const progress = parseInt(progressMatch[1]);
-					updateProgress(jobConfig.jobId, 50 + (progress * 0.4)); // Scale to 50-90%
+					updateProgress(jobConfig.jobId, 50 + (progress * 0.4));
 				}
 			});
 
@@ -298,14 +300,12 @@ export class MoviePyEngine implements IVideoEngine {
 			await fs.rename(tempPath, finalPath);
 			console.log('✅ Video file moved successfully via rename');
 		} catch (error) {
-			// If rename fails, copy and delete
 			console.log('⚠️ Rename failed, trying copy:', error);
 			await fs.copyFile(tempPath, finalPath);
-			await fs.unlink(tempPath).catch(() => {}); // Ignore cleanup errors
+			await fs.unlink(tempPath).catch(() => {});
 			console.log('✅ Video file moved successfully via copy');
 		}
 		
-		// Verify the file exists at the final location
 		const finalExists = await fs.access(finalPath).then(() => true).catch(() => false);
 		if (!finalExists) {
 			throw new Error(`Failed to move video file to final location: ${finalPath}`);
