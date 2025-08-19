@@ -3,6 +3,10 @@ import { getAuth, Auth } from 'firebase/auth';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
+// Debug: Log all environment variables that start with NEXT_PUBLIC_
+const allEnvVars = Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'));
+console.log('Available NEXT_PUBLIC_ environment variables:', allEnvVars);
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
