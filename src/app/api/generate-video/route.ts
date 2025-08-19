@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { generateVideo } from '@/lib/video-generator';
-import { VideoOptions, SubredditStory, VideoGenerationOptions } from '@/lib/video-generator/types';
-import { generateStory } from '@/lib/story-generator/openai';
-import { createVideoStatus, setVideoReady, setVideoFailed, updateProgress, setVideoGenerating } from '@/lib/video-generator/status';
 
 // Ensure Node runtime and dynamic route
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// Feature flag retained but we prefer local async generation in single service setup
-const FORCE_RAILWAY = process.env.FORCE_RAILWAY === 'true';
 
 function safeLogOptions(options: unknown): Record<string, unknown> {
 	if (!options || typeof options !== 'object') return { type: typeof options };
@@ -34,13 +27,19 @@ function safeLogOptions(options: unknown): Record<string, unknown> {
 	};
 }
 
-async function startLocalGeneration(options: VideoOptions, videoId: string) {
+async function startLocalGeneration(options: any, videoId: string) {
 	try {
+		const [{ createVideoStatus, setVideoReady, setVideoFailed, updateProgress, setVideoGenerating }, { generateVideo }, { generateStory }] = await Promise.all([
+			import('@/lib/video-generator/status'),
+			import('@/lib/video-generator'),
+			import('@/lib/story-generator/openai'),
+		]);
+
 		await createVideoStatus(videoId);
 		await setVideoGenerating(videoId);
 		await updateProgress(videoId, 5);
 
-		let story: SubredditStory;
+		let story: any;
 		if (options.customStory) {
 			story = {
 				title: options.customStory.title,
@@ -49,27 +48,25 @@ async function startLocalGeneration(options: VideoOptions, videoId: string) {
 				author: 'Anonymous',
 			};
 		} else {
-			const subreddit = options.subreddit.startsWith('r/') ? options.subreddit : `r/${options.subreddit}`;
-			const storyParams = {
+			const subreddit = options.subreddit && options.subreddit.startsWith('r/') ? options.subreddit : `r/${options.subreddit || 'stories'}`;
+			story = await generateStory({
 				subreddit,
 				isCliffhanger: options.isCliffhanger,
-				narratorGender: options.voice.gender,
-			};
-			story = await generateStory(storyParams);
+				narratorGender: options.voice?.gender,
+			});
 		}
 
 		await updateProgress(videoId, 10);
 
-		const generationOptions: VideoGenerationOptions = {
-			...options,
-			story,
-		};
-
-		const outputPath = await generateVideo(generationOptions, videoId);
+		const generationOptions = { ...options, story };
+		const outputPath = await generateVideo(generationOptions as any, videoId);
 		await setVideoReady(videoId, outputPath);
 	} catch (error) {
+		try {
+			const { setVideoFailed } = await import('@/lib/video-generator/status');
+			await setVideoFailed(videoId, error instanceof Error ? error.message : 'Video generation failed');
+		} catch {}
 		console.error('Async local generation failed:', error);
-		await setVideoFailed(videoId, error instanceof Error ? error.message : 'Video generation failed');
 	}
 }
 
@@ -78,13 +75,12 @@ export async function POST(request: NextRequest) {
 	const videoId = uuidv4();
 	console.log('Generated videoId:', videoId);
 
-	let options: VideoOptions;
+	let options: any;
 	try {
 		const bodyText = await request.text();
 		console.log('Raw request body length:', bodyText.length);
 		console.log('Raw request body preview:', bodyText.substring(0, 200));
-		
-		options = JSON.parse(bodyText);
+		options = JSON.parse(bodyText || '{}');
 		console.log('Successfully parsed JSON');
 	} catch (e) {
 		console.error('Failed to parse request body:', e);
@@ -97,19 +93,15 @@ export async function POST(request: NextRequest) {
 
 	try {
 		console.log('Received video generation request (safe):', safeLogOptions(options));
-
-		// Kick off generation in the background and return immediately
 		setTimeout(() => {
 			startLocalGeneration(options, videoId).catch((err) => console.error('Background generation error:', err));
 		}, 0);
-
 		const response = { success: true, videoId, message: 'Video generation started' };
 		console.log('Returning response:', response);
 		return NextResponse.json(response);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Failed to start video generation';
 		console.error('Error starting video generation:', error);
-		// Never return 500; surface error in body for friendlier UX
 		return NextResponse.json({ success: false, error: errorMessage }, { status: 200 });
 	}
 } 
