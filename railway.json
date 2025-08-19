@@ -1,10 +1,9 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "nixpacks"
+    "builder": "dockerfile"
   },
   "deploy": {
-    "startCommand": "node railway-backend.js",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 300
   }
