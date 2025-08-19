@@ -56,6 +56,8 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=deps /app/requirements.txt ./requirements.txt
 COPY --from=builder /app/src ./src
 COPY --from=deps /app/venv ./venv
+# Include shim in case platform forces `node railway-backend.js`
+COPY --from=builder /app/railway-backend.js ./railway-backend.js
 
 # Ensure ffmpeg present (in base layer) and python venv path for our code
 ENV PYTHON_PATH=/app/venv/bin/python3
