@@ -136,10 +136,10 @@ class EnhancedVideoGenerator:
             return 1.0 + 0.08 * (1.0 - p)
         animated_clip = base_clip.resize(scale_at_time)
         
-        # Position at bottom center of video
+        # Position at vertical center of video
         video_width, video_height = video_size
         caption_x = (video_width - img_width) // 2
-        caption_y = video_height - 200
+        caption_y = (video_height - img_height) // 2
         
         return animated_clip.set_position((caption_x, caption_y))
 
@@ -224,8 +224,10 @@ class EnhancedVideoGenerator:
                 banner_rgb = banner_rgba[:, :, :3]
                 banner_alpha = banner_rgba[:, :, 3].astype(np.float32) / 255.0
                 
-                banner_clip = ImageClip(banner_rgb, duration=total_duration)
-                banner_clip = banner_clip.set_mask(ImageClip(banner_alpha, ismask=True).set_duration(total_duration))
+                # Limit banner to the opening seconds only
+                banner_duration = min(3.0, max(1.5, total_duration * 0.35))
+                banner_clip = ImageClip(banner_rgb, duration=banner_duration)
+                banner_clip = banner_clip.set_mask(ImageClip(banner_alpha, ismask=True).set_duration(banner_duration))
                 
                 # Scale banner appropriately
                 banner_width = int(target_width * 0.9)  # 90% of video width
