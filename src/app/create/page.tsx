@@ -286,29 +286,25 @@ export default function Create() {
 
       console.log('Response received:', response.status, response.statusText);
 
-      if (!response.ok) {
-        let errorMessage;
-        try {
-          const errorText = await response.text();
-          console.error('Video generation failed:', response.status, errorText);
-          errorMessage = `Video generation failed (${response.status}): ${errorText}`;
-        } catch (parseError) {
-          console.error('Failed to parse error response:', parseError);
-          errorMessage = `Video generation failed (${response.status}): ${response.statusText}`;
-        }
-        setError(errorMessage);
+      // Try to parse JSON regardless of HTTP status; server always returns JSON
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        // Fall back to text for debugging
+        const errorText = await response.text().catch(() => '');
+        console.error('Failed to parse response JSON:', parseError, 'Body:', errorText);
+        setError('Invalid response from server. Please try again.');
         setIsGenerating(false);
         setProgress(0);
         return;
       }
+      console.log('Response data:', JSON.stringify(data, null, 2));
 
-      let data;
-      try {
-        data = await response.json();
-        console.log('Response data:', JSON.stringify(data, null, 2));
-      } catch (parseError) {
-        console.error('Failed to parse response JSON:', parseError);
-        setError('Invalid response from server. Please try again.');
+      // If server indicates success, proceed even if HTTP status was not 200
+      if (!data || data.success === false) {
+        const serverMsg = data && data.error ? String(data.error) : `${response.status} ${response.statusText}`;
+        setError(`Video generation failed: ${serverMsg}`);
         setIsGenerating(false);
         setProgress(0);
         return;
