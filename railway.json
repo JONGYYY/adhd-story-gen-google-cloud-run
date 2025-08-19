@@ -5,6 +5,10 @@
   },
   "deploy": {
     "healthcheckPath": "/api/health",
-    "healthcheckTimeout": 300
+    "healthcheckTimeout": 300,
+    "environment": {
+      "NODE_ENV": "production",
+      "NEXT_TELEMETRY_DISABLED": "1"
+    }
   }
 } 
