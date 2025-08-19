@@ -13,6 +13,7 @@ const FORCE_RAILWAY = process.env.FORCE_RAILWAY === 'true';
 
 async function startLocalGeneration(options: VideoOptions, videoId: string) {
 	try {
+		await createVideoStatus(videoId);
 		await setVideoGenerating(videoId);
 		await updateProgress(videoId, 5);
 
@@ -53,27 +54,25 @@ async function startLocalGeneration(options: VideoOptions, videoId: string) {
 export async function POST(request: NextRequest) {
 	const videoId = uuidv4();
 
+	let options: VideoOptions;
 	try {
-		const options: VideoOptions = await request.json();
+		options = await request.json();
+	} catch (e) {
+		return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+	}
+
+	try {
 		console.log('Received video generation request with options (async start):', JSON.stringify(options, null, 2));
 
-		// Always create initial status
-		await createVideoStatus(videoId);
-
 		// Kick off generation in the background and return immediately
-		startLocalGeneration(options, videoId).catch((e) => {
-			console.error('Background generation error:', e);
-		});
+		setTimeout(() => {
+			startLocalGeneration(options, videoId).catch((err) => console.error('Background generation error:', err));
+		}, 0);
 
-		return NextResponse.json({
-			success: true,
-			videoId,
-			message: 'Video generation started',
-		});
+		return NextResponse.json({ success: true, videoId, message: 'Video generation started' });
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Failed to start video generation';
 		console.error('Error starting video generation:', error);
-		await setVideoFailed(videoId, errorMessage);
 		return NextResponse.json({ error: errorMessage }, { status: 500 });
 	}
 } 
