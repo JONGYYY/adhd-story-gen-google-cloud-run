@@ -5,7 +5,8 @@ import { VideoOptions, SubredditStory, VideoGenerationOptions } from '@/lib/vide
 import { generateStory } from '@/lib/story-generator/openai';
 import { createVideoStatus, setVideoReady, setVideoFailed, updateProgress, setVideoGenerating } from '@/lib/video-generator/status';
 
-// Prevent static generation but use Node.js runtime for video generation
+// Ensure Node runtime and dynamic route
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Feature flag retained but we prefer local async generation in single service setup
@@ -16,7 +17,6 @@ function safeLogOptions(options: unknown): Record<string, unknown> {
 	const o = options as Record<string, unknown>;
 	const pick = (key: string) => (key in o ? o[key] : undefined);
 	return {
-		// top-level fields we care about; avoid deep structures
 		subreddit: pick('subreddit'),
 		isCliffhanger: pick('isCliffhanger'),
 		voice: (() => {
@@ -40,7 +40,6 @@ async function startLocalGeneration(options: VideoOptions, videoId: string) {
 		await setVideoGenerating(videoId);
 		await updateProgress(videoId, 5);
 
-		// Prepare story (generate if not provided)
 		let story: SubredditStory;
 		if (options.customStory) {
 			story = {
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
 	try {
 		options = await request.json();
 	} catch (e) {
-		return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+		return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 200 });
 	}
 
 	try {
@@ -96,6 +95,7 @@ export async function POST(request: NextRequest) {
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Failed to start video generation';
 		console.error('Error starting video generation:', error);
-		return NextResponse.json({ error: errorMessage }, { status: 500 });
+		// Never return 500; surface error in body for friendlier UX
+		return NextResponse.json({ success: false, error: errorMessage }, { status: 200 });
 	}
 } 
