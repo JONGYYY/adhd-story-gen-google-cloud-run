@@ -74,13 +74,25 @@ async function startLocalGeneration(options: VideoOptions, videoId: string) {
 }
 
 export async function POST(request: NextRequest) {
+	console.log('=== POST /api/generate-video called ===');
 	const videoId = uuidv4();
+	console.log('Generated videoId:', videoId);
 
 	let options: VideoOptions;
 	try {
-		options = await request.json();
+		const bodyText = await request.text();
+		console.log('Raw request body length:', bodyText.length);
+		console.log('Raw request body preview:', bodyText.substring(0, 200));
+		
+		options = JSON.parse(bodyText);
+		console.log('Successfully parsed JSON');
 	} catch (e) {
-		return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 200 });
+		console.error('Failed to parse request body:', e);
+		return NextResponse.json({ 
+			success: false, 
+			error: 'Invalid JSON body',
+			details: e instanceof Error ? e.message : 'Unknown parse error'
+		}, { status: 200 });
 	}
 
 	try {
@@ -91,7 +103,9 @@ export async function POST(request: NextRequest) {
 			startLocalGeneration(options, videoId).catch((err) => console.error('Background generation error:', err));
 		}, 0);
 
-		return NextResponse.json({ success: true, videoId, message: 'Video generation started' });
+		const response = { success: true, videoId, message: 'Video generation started' };
+		console.log('Returning response:', response);
+		return NextResponse.json(response);
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Failed to start video generation';
 		console.error('Error starting video generation:', error);
