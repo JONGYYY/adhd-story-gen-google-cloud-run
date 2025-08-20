@@ -228,7 +228,7 @@ export class MoviePyEngine implements IVideoEngine {
 
 	private async generateVideo(jobConfig: JobConfig, bannerPath: string, titleAudioPath: string | null, storyAudioPath: string): Promise<string> {
 		const outputPath = path.join(path.dirname(jobConfig.ttsPath), `output_${jobConfig.jobId}.mp4`);
-		const videoScriptPath = path.join(process.cwd(), 'src', 'python', 'enhanced_generate_video.py');
+		const videoScriptPath = path.join(process.cwd(), 'src', 'python', 'enhanced_generate_video_v2.py');
 		
 		// Create story data for informational purposes
 		const storyData = {
