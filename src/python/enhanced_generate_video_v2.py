@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import shutil
+from typing import Optional, Tuple, Dict, Any
 from moviepy.editor import *
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -73,7 +74,7 @@ class EnhancedV2:
         y = (vh - img_h) // 2
         return clip.set_position((x, y))
 
-    def generate(self, title_audio: str | None, story_audio: str, bg: str, banner_png: str, out_mp4: str, align_json: str):
+    def generate(self, title_audio: Optional[str], story_audio: str, bg: str, banner_png: str, out_mp4: str, align_json: str):
         logger.info(f"Starting EnhancedV2 {VERSION}")
         target_w, target_h = 1080, 1920
         title_d = 0.0
