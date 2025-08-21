@@ -165,20 +165,22 @@ class EnhancedV2:
         layers = [bgclip]
         if banner_clip: layers.append(banner_clip)
         layers.extend(captions)
-        final = CompositeVideoClip(layers, size=(target_w, target_h))
+        final = CompositeVideoClip(layers, size=(target_w, target_h)).set_fps(30)
         if tclip and title_d > 0.0:
             audio = concatenate_audioclips([tclip, sclip])
         else:
             audio = sclip
-        final = final.set_audio(audio)
+        final = final.set_audio(audio.set_fps(44100))
         logger.info(f"Writing final video to: {out_mp4} total_d={total_d:.2f}s layers={len(layers)}")
         final.write_videofile(
             out_mp4,
             fps=30,
-            codec='libx264',
+            codec='mpeg4',
             audio_codec='aac',
+            bitrate='6000k',
+            audio_bitrate='192k',
             preset='medium',
-            ffmpeg_params=['-pix_fmt','yuv420p','-movflags','+faststart','-crf','23'],
+            ffmpeg_params=['-movflags','+faststart'],
             temp_audiofile='temp-audio.m4a',
             remove_temp=True,
             threads=4,
