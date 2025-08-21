@@ -61,8 +61,8 @@ class EnhancedV2:
         rgba = np.array(img)
         rgb = rgba[:, :, :3]
         a = (rgba[:, :, 3].astype(np.float32) / 255.0)
-        base = ImageClip(rgb).set_duration(duration)
-        base = base.set_mask(ImageClip(a, ismask=True).set_duration(duration))
+        base = ImageClip(rgb).set_duration(max(0.0001, duration))
+        base = base.set_mask(ImageClip(a, ismask=True).set_duration(max(0.0001, duration)))
         # subtle bounce
         bounce_d = 0.2
         def scaler(t):
@@ -80,21 +80,26 @@ class EnhancedV2:
         title_d = 0.0
         if title_audio and os.path.exists(title_audio):
             try:
+                logger.info(f"Title audio path: {title_audio} size={os.path.getsize(title_audio)} bytes")
                 tclip = AudioFileClip(title_audio)
-                title_d = float(tclip.duration)
+                title_d = float(tclip.duration or 0.0)
+                logger.info(f"Title duration: {title_d:.2f}s")
             except Exception as e:
                 logger.warning(f"Failed to load title audio: {e}")
                 tclip = None
         else:
             tclip = None
+        logger.info(f"Story audio path: {story_audio} size={os.path.getsize(story_audio)} bytes")
         sclip = AudioFileClip(story_audio)
-        total_d = title_d + sclip.duration
+        story_d = float(sclip.duration or 0.0)
+        logger.info(f"Story duration: {story_d:.2f}s")
+        total_d = max(0.1, title_d + story_d)
         bgclip = VideoFileClip(bg).resize(height=target_h)
         if bgclip.w < target_w:
             bgclip = bgclip.resize(width=target_w)
         bgclip = bgclip.crop(x1=(bgclip.w - target_w)//2, width=target_w)
-        if bgclip.duration < total_d:
-            reps = int(np.ceil(total_d / bgclip.duration))
+        if (bgclip.duration or 0) < total_d:
+            reps = int(np.ceil(total_d / max(0.1, bgclip.duration)))
             bgclip = concatenate_videoclips([bgclip] * reps)
         bgclip = bgclip.subclip(0, total_d)
         banner_clip = None
@@ -120,7 +125,7 @@ class EnhancedV2:
         if os.path.exists(align_json):
             data = json.loads(open(align_json, 'r').read())
             for w in data:
-                d = float(w['end'] - w['start'])
+                d = float((w['end'] - w['start']) or 0.0)
                 clip = self.create_word_clip(w['word'], d, (target_w, target_h), style)
                 clip = clip.set_start(title_d + float(w['start']))
                 captions.append(clip)
@@ -128,11 +133,12 @@ class EnhancedV2:
         if banner_clip: layers.append(banner_clip)
         layers.extend(captions)
         final = CompositeVideoClip(layers, size=(target_w, target_h))
-        if tclip:
+        if tclip and title_d > 0.0:
             audio = concatenate_audioclips([tclip, sclip])
         else:
             audio = sclip
         final = final.set_audio(audio)
+        logger.info(f"Writing final video to: {out_mp4} total_d={total_d:.2f}s layers={len(layers)}")
         final.write_videofile(out_mp4, fps=30, codec='libx264', audio_codec='aac', audio_bitrate='192k', bitrate='6000k',
                               preset='medium', ffmpeg_params=['-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-profile:v','high','-level','4.1'],
                               temp_audiofile='temp-audio.m4a', remove_temp=True, threads=4, verbose=False, logger=None)

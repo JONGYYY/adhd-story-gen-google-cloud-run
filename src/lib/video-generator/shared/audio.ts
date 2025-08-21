@@ -29,6 +29,31 @@ async function resolvePythonPath(): Promise<string> {
 	}
 }
 
+// Helper: generate TTS with edge-tts (Python). Returns the path written.
+async function generateEdgeTTS(text: string, outPath: string): Promise<string> {
+	const pythonPath = await resolvePythonPath();
+	return new Promise((resolve, reject) => {
+		const script = `
+import asyncio, edge_tts, sys
+text = sys.argv[1]
+out = sys.argv[2]
+voice = "en-US-GuyNeural"
+async def main():
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(out)
+asyncio.run(main())
+`;
+		const child = spawn(pythonPath, ['-c', script, text, outPath]);
+		let stderr = '';
+		child.stderr.on('data', d => { stderr += d.toString(); });
+		child.on('close', code => {
+			if (code === 0) resolve(outPath);
+			else reject(new Error(`edge-tts exited ${code}: ${stderr}`));
+		});
+		child.on('error', err => reject(err));
+	});
+}
+
 // Helper function to create a silent WAV audio buffer for testing
 function createSilentAudioBuffer(durationSeconds: number): Buffer {
 	const sampleRate = 22050; // 22.05 kHz
@@ -91,7 +116,8 @@ export async function generateTTSAndAlignment(
 		throw new Error(`Failed to create job directory: ${dirError.message}`);
 	}
 
-	const audioPath = path.join(jobDir, 'voice.wav');
+	// Use wav for ElevenLabs, mp3 for edge-tts
+	let audioPath = path.join(jobDir, 'voice.wav');
 	const alignmentPath = path.join(jobDir, 'align.json');
 
 	console.log(`🎵 Audio will be saved to: ${audioPath}`);
@@ -104,7 +130,7 @@ export async function generateTTSAndAlignment(
 	if (voice.provider === 'elevenlabs') {
 		const apiKey = process.env.ELEVENLABS_API_KEY;
 		if (!apiKey) {
-			console.warn('⚠️ ElevenLabs API key not found, falling back to Edge TTS');
+			console.warn('⚠️ ElevenLabs API key not found, switching to edge-tts');
 			voice.provider = 'edge';
 		}
 	}
@@ -117,21 +143,22 @@ export async function generateTTSAndAlignment(
 				text,
 				voice: { id: voice.voiceId || 'adam', gender: 'male' }
 			});
-
 			await fs.writeFile(audioPath, arrayBufferToBuffer(audioBuffer));
 			console.log('✅ ElevenLabs audio saved successfully');
-			
+		} else if (voice.provider === 'edge') {
+			console.log('🔄 Using edge-tts...');
+			// Save as MP3 to avoid re-encoding
+			audioPath = path.join(jobDir, 'voice.mp3');
+			await generateEdgeTTS(text, audioPath);
+			console.log('✅ Edge TTS audio saved successfully');
 		} else {
 			// Fallback: create silent audio
 			console.log('🔄 Creating fallback silent audio...');
 			const estimatedDuration = Math.max(text.length * 0.08, 2); // 0.08s per character, min 2s
 			const fallbackAudio = createSilentAudioBuffer(estimatedDuration);
-			
 			console.log(`📊 Creating ${estimatedDuration}s of silent audio (${fallbackAudio.length} bytes)`);
-			
 			await fs.writeFile(audioPath, fallbackAudio);
 			console.log('✅ Fallback silent audio saved successfully');
-			
 			duration = estimatedDuration;
 		}
 		
@@ -165,14 +192,12 @@ export async function generateTTSAndAlignment(
 	}
 
 	// Get actual audio duration if not set
-	if (duration === 5.0) {
-		try {
-			duration = await getAudioDuration(audioPath);
-			console.log(`⏱️ Actual audio duration: ${duration}s`);
-		} catch (durationError) {
-			console.warn('⚠️ Could not get audio duration, using estimated:', durationError);
-			duration = Math.max(text.length * 0.08, 2);
-		}
+	try {
+		duration = await getAudioDuration(audioPath);
+		console.log(`⏱️ Actual audio duration: ${duration}s`);
+	} catch (durationError) {
+		console.warn('⚠️ Could not get audio duration, using estimate:', durationError);
+		duration = Math.max(text.length * 0.08, 2);
 	}
 
 	console.log(`✅ TTS generation completed successfully for job ${jobId}`);
@@ -397,15 +422,16 @@ export async function generateTitleAndStoryAudio(
 	const jobDir = path.join(tmpDir, 'jobs', jobId);
 	await fs.mkdir(jobDir, { recursive: true });
 
-	// Generate title audio in the main job directory
+	// Generate title audio
 	const titleResult = await generateTTSAndAlignment(title, voice, `${jobId}_title`);
-	
-	// Generate story audio in the main job directory
+	// Generate story audio
 	const storyResult = await generateTTSAndAlignment(story, voice, `${jobId}_story`);
 
-	// Copy files to the main job directory for easier access
-	const titleAudioPath = path.join(jobDir, 'title_audio.wav');
-	const storyAudioPath = path.join(jobDir, 'story_audio.wav');
+	// Copy files to the main job directory preserving extensions
+	const titleExt = path.extname(titleResult.audioPath) || '.wav';
+	const storyExt = path.extname(storyResult.audioPath) || '.wav';
+	const titleAudioPath = path.join(jobDir, `title_audio${titleExt}`);
+	const storyAudioPath = path.join(jobDir, `story_audio${storyExt}`);
 	const titleAlignPath = path.join(jobDir, 'title_align.json');
 	const storyAlignPath = path.join(jobDir, 'story_align.json');
 
