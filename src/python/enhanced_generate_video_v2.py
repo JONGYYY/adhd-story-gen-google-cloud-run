@@ -97,6 +97,12 @@ class EnhancedV2:
         logger.info(f"Background path: {bg} size={os.path.getsize(bg) if os.path.exists(bg) else 'missing'}")
         bgclip = VideoFileClip(bg).resize(height=target_h)
         logger.info(f"Background duration: {bgclip.duration:.2f}s, size={bgclip.w}x{bgclip.h}")
+        # Prefetch first frame to validate
+        try:
+            f0 = bgclip.get_frame(0)
+            logger.info(f"Background first frame shape: {f0.shape}")
+        except Exception as e:
+            logger.warning(f"Failed to read first background frame: {e}")
         if bgclip.w < target_w:
             bgclip = bgclip.resize(width=target_w)
         bgclip = bgclip.crop(x1=(bgclip.w - target_w)//2, width=target_w)
@@ -151,8 +157,8 @@ class EnhancedV2:
             temp_audiofile='temp-audio.m4a',
             remove_temp=True,
             threads=4,
-            verbose=False,
-            logger=None
+            verbose=True,
+            logger='bar'
         )
         # Post-write sanity check
         try:
