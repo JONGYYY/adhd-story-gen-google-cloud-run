@@ -10,6 +10,7 @@ import path from 'path';
 import fs from 'fs/promises';
 // Use the new hybrid generator (pluggable engines)
 import { generateVideo as generateHybridVideo } from './new-hybrid-generator';
+import { generateVideoWithRemotion } from './remotion-entry';
 
 const execAsync = promisify(exec);
 
@@ -53,6 +54,11 @@ export async function generateVideo(options: VideoOptions, videoId: string): Pro
     ...options,
     story,
   };
+
+  // Feature flag: prefer Remotion pipeline when enabled
+  if ((process.env.REMOTION_ENABLED || '').toLowerCase() === 'true') {
+    return await generateVideoWithRemotion(generationOptions as any, videoId);
+  }
 
   // Use the new hybrid generator with MoviePy engine and fallbacks
   return generateHybridVideo(generationOptions as any, videoId);
