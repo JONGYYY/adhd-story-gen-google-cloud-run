@@ -94,7 +94,9 @@ class EnhancedV2:
         story_d = float(sclip.duration or 0.0)
         logger.info(f"Story duration: {story_d:.2f}s")
         total_d = max(0.1, title_d + story_d)
+        logger.info(f"Background path: {bg} size={os.path.getsize(bg) if os.path.exists(bg) else 'missing'}")
         bgclip = VideoFileClip(bg).resize(height=target_h)
+        logger.info(f"Background duration: {bgclip.duration:.2f}s, size={bgclip.w}x{bgclip.h}")
         if bgclip.w < target_w:
             bgclip = bgclip.resize(width=target_w)
         bgclip = bgclip.crop(x1=(bgclip.w - target_w)//2, width=target_w)
@@ -139,9 +141,27 @@ class EnhancedV2:
             audio = sclip
         final = final.set_audio(audio)
         logger.info(f"Writing final video to: {out_mp4} total_d={total_d:.2f}s layers={len(layers)}")
-        final.write_videofile(out_mp4, fps=30, codec='libx264', audio_codec='aac', audio_bitrate='192k', bitrate='6000k',
-                              preset='medium', ffmpeg_params=['-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-profile:v','high','-level','4.1'],
-                              temp_audiofile='temp-audio.m4a', remove_temp=True, threads=4, verbose=False, logger=None)
+        final.write_videofile(
+            out_mp4,
+            fps=30,
+            codec='libx264',
+            audio_codec='aac',
+            preset='medium',
+            ffmpeg_params=['-pix_fmt','yuv420p','-movflags','+faststart','-crf','23'],
+            temp_audiofile='temp-audio.m4a',
+            remove_temp=True,
+            threads=4,
+            verbose=False,
+            logger=None
+        )
+        # Post-write sanity check
+        try:
+            out_size = os.path.getsize(out_mp4)
+            logger.info(f"Output size: {out_size} bytes")
+            if out_size < 1024 * 200:  # <200KB is suspicious for 1080x1920
+                logger.warning("Output MP4 is unusually small; check encoder and inputs")
+        except Exception as e:
+            logger.warning(f"Failed to stat output: {e}")
         if tclip: tclip.close()
         sclip.close()
         if banner_clip: banner_clip.close()
