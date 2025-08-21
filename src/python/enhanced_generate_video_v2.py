@@ -22,6 +22,25 @@ class EnhancedV2:
     def __init__(self, job_id: str):
         self.job_id = job_id
 
+    def create_grid_background(self, duration: float, w: int = 1080, h: int = 1920) -> VideoClip:
+        # Black base
+        base = ColorClip(size=(w, h), color=(0, 0, 0)).set_duration(duration)
+        # Draw grid using numpy per frame
+        cell = 200
+        thickness = 2
+        def make_frame(t):
+            frame = np.zeros((h, w, 3), dtype=np.uint8)
+            # draw white grid lines
+            for x in range(0, w, cell):
+                frame[:, max(0, x - thickness//2):min(w, x + thickness//2 + 1), :] = 255
+            for y in range(0, h, cell):
+                frame[max(0, y - thickness//2):min(h, y + thickness//2 + 1), :, :] = 255
+            # fade slight alpha
+            frame = (frame * 0.2).astype(np.uint8)
+            return frame
+        grid = VideoClip(make_frame=make_frame).set_duration(duration)
+        return CompositeVideoClip([base, grid]).set_duration(duration)
+
     def create_word_clip(self, word: str, duration: float, video_size: tuple, style: dict):
         font_size = style.get('fontSize', 75)
         font_paths = [
@@ -94,22 +113,28 @@ class EnhancedV2:
         story_d = float(sclip.duration or 0.0)
         logger.info(f"Story duration: {story_d:.2f}s")
         total_d = max(0.1, title_d + story_d)
-        logger.info(f"Background path: {bg} size={os.path.getsize(bg) if os.path.exists(bg) else 'missing'}")
-        bgclip = VideoFileClip(bg).resize(height=target_h)
-        logger.info(f"Background duration: {bgclip.duration:.2f}s, size={bgclip.w}x{bgclip.h}")
-        # Prefetch first frame to validate
-        try:
-            f0 = bgclip.get_frame(0)
-            logger.info(f"Background first frame shape: {f0.shape}")
-        except Exception as e:
-            logger.warning(f"Failed to read first background frame: {e}")
-        if bgclip.w < target_w:
-            bgclip = bgclip.resize(width=target_w)
-        bgclip = bgclip.crop(x1=(bgclip.w - target_w)//2, width=target_w)
-        if (bgclip.duration or 0) < total_d:
-            reps = int(np.ceil(total_d / max(0.1, bgclip.duration)))
-            bgclip = concatenate_videoclips([bgclip] * reps)
-        bgclip = bgclip.subclip(0, total_d)
+
+        # Build background
+        if bg == 'PLACEHOLDER' or not os.path.exists(bg):
+            logger.info("Synthesizing grid background internally")
+            bgclip = self.create_grid_background(duration=total_d, w=target_w, h=target_h)
+        else:
+            logger.info(f"Background path: {bg} size={os.path.getsize(bg)}")
+            bgclip = VideoFileClip(bg).resize(height=target_h)
+            logger.info(f"Background duration: {bgclip.duration:.2f}s, size={bgclip.w}x{bgclip.h}")
+            try:
+                f0 = bgclip.get_frame(0)
+                logger.info(f"Background first frame shape: {f0.shape}")
+            except Exception as e:
+                logger.warning(f"Failed to read first background frame: {e}")
+            if bgclip.w < target_w:
+                bgclip = bgclip.resize(width=target_w)
+            bgclip = bgclip.crop(x1=(bgclip.w - target_w)//2, width=target_w)
+            if (bgclip.duration or 0) < total_d:
+                reps = int(np.ceil(total_d / max(0.1, bgclip.duration)))
+                bgclip = concatenate_videoclips([bgclip] * reps)
+            bgclip = bgclip.subclip(0, total_d)
+
         banner_clip = None
         if os.path.exists(banner_png):
             from PIL import Image as PILImage
@@ -164,7 +189,7 @@ class EnhancedV2:
         try:
             out_size = os.path.getsize(out_mp4)
             logger.info(f"Output size: {out_size} bytes")
-            if out_size < 1024 * 200:  # <200KB is suspicious for 1080x1920
+            if out_size < 1024 * 200:
                 logger.warning("Output MP4 is unusually small; check encoder and inputs")
         except Exception as e:
             logger.warning(f"Failed to stat output: {e}")

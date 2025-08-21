@@ -135,26 +135,8 @@ export class MoviePyEngine implements IVideoEngine {
 				console.log(`🎞️ Background clip found: ${expectedBgPath} (${bgStats.size} bytes)`);
 			} catch (bgError) {
 				console.warn(`⚠️ Background clip missing at ${expectedBgPath}:`, bgError);
-				console.warn('⚠️ Generating placeholder background...');
-				const placeholderPath = path.join(jobDir, 'bg_placeholder.mp4');
-				// Try download first
-				const downloaded = await downloadDefaultBackground(placeholderPath);
-				if (!downloaded) {
-					console.log('📹 Creating grid placeholder background...');
-					await new Promise<void>((resolve, reject) => {
-						const ffmpeg = spawn('ffmpeg', [
-							'-f','lavfi','-i','color=c=black:s=1080x1920:r=30',
-							'-t','10',
-							'-vf','drawgrid=width=200:height=200:color=white@0.2:thickness=2',
-							'-c:v','libx264','-pix_fmt','yuv420p',
-							placeholderPath
-						]);
-						ffmpeg.on('close',(code)=> code===0?resolve():reject(new Error(`ffmpeg exited ${code}`)));
-						ffmpeg.on('error',(err)=>reject(err));
-					});
-				}
-				jobConfig.bgSpec.clips[0] = placeholderPath;
-				console.log(`✅ Using placeholder background: ${placeholderPath}`);
+				console.warn('⚠️ Will synthesize placeholder background inside Python');
+				jobConfig.bgSpec.clips[0] = 'PLACEHOLDER';
 			}
 
 			// Copy story alignment to expected location
