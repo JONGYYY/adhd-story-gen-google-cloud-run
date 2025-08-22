@@ -5,6 +5,21 @@ import { EnqueueVideoPayload } from './types';
 import { isR2Configured, uploadFileToR2 } from '@/lib/storage/r2';
 import path from 'path';
 
+async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: () => void): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout();
+      reject(new Error(`Job timed out after ${ms}ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 async function uploadIfConfigured(localPath: string, videoId: string): Promise<string> {
 	if (isR2Configured()) {
 		const key = `videos/${videoId}.mp4`;
@@ -27,7 +42,11 @@ export function startWorker(): Worker | null {
 		try {
 			await setVideoGenerating(videoId);
 			await updateProgress(videoId, 5);
-			const outputPath = await generateVideo({ ...options }, videoId);
+			const outputPath = await withTimeout(
+				generateVideo({ ...options }, videoId),
+				parseInt(process.env.JOB_TIMEOUT_MS || '180000', 10),
+				() => { try { setVideoFailed(videoId, 'Timed out after 180s'); } catch {} }
+			);
 			await updateProgress(videoId, 95);
 			const finalUrl = await uploadIfConfigured(outputPath, videoId);
 			await setVideoReady(videoId, finalUrl);
