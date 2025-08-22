@@ -1,0 +1,30 @@
+app = "taleo-web"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "stop"
+  min_machines_running = 1
+  processes = ["app"]
+
+[[services.concurrency]]
+  type = "requests"
+  soft_limit = 25
+  hard_limit = 50
+
+[checks]
+  [checks.http]
+    port = 8080
+    path = "/api/health"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "30s" 

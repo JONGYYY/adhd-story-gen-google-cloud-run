@@ -1,0 +1,8 @@
+app = "taleo-worker"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Override the Docker CMD to run the worker
+command = ["npm", "run", "worker"] 
