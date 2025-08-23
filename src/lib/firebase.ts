@@ -65,83 +65,6 @@ let auth: Auth | null = null;
 let db: Firestore | null = null;
 let initPromise: Promise<void> | null = null;
 
-console.log('Attempting to initialize Firebase...');
-try {
-  if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApps()[0];
-  }
-} catch (e) {
-  console.error('initializeApp failed:', e);
-}
-
-// Initialize Auth only in the browser, with robust persistence fallbacks
-if (typeof window !== 'undefined' && app) {
-  try {
-    // Prefer explicit initialization with available persistences
-    auth = initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-      popupRedirectResolver: browserPopupRedirectResolver,
-    });
-  } catch (e) {
-    // Fallback to default getAuth
-    try {
-      auth = getAuth(app);
-    } catch (e2) {
-      console.warn('initializeAuth/getAuth failed, falling back to in-memory:', e2);
-      try {
-        auth = getAuth();
-      } catch {}
-    }
-  }
-  // Ensure a persistence is set even in restricted modes (e.g., Safari Private)
-  try {
-    if (auth) {
-      setPersistence(auth as any, browserLocalPersistence).catch(() => {
-        try { setPersistence(auth as any, inMemoryPersistence as any); } catch {}
-      });
-    }
-  } catch {}
-}
-
-try {
-  if (app) {
-    db = getFirestore(app);
-  }
-} catch (e) {
-  console.error('getFirestore failed:', e);
-}
-
-// Optional features (never block auth)
-if (typeof window !== 'undefined' && db) {
-  try {
-    enableIndexedDbPersistence(db).catch((err: any) => {
-      if (err?.code === 'failed-precondition') {
-        console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
-      } else if (err?.code === 'unimplemented') {
-        console.warn('Persistence not supported in this browser.');
-      } else {
-        console.warn('Offline persistence disabled:', err?.message || err);
-      }
-    });
-  } catch (e) {
-    console.warn('Skipping persistence setup:', e);
-  }
-}
-
-if (typeof window !== 'undefined' && app) {
-  try {
-    isSupported()
-      .then((yes) => {
-        if (yes) {
-          try { getAnalytics(app!); } catch {}
-        }
-      })
-      .catch(() => {});
-  } catch {}
-}
-
 export type { Auth };
 export { auth, db };
 
@@ -149,10 +72,7 @@ export { auth, db };
 export function getClientAuth(): Auth | null {
   try {
     if (typeof window === 'undefined') return null;
-    if (getApps().length === 0) {
-      try { initializeApp(firebaseConfig); } catch {}
-    }
-    return getAuth();
+    return auth;
   } catch (e) {
     console.warn('getClientAuth failed:', e);
     return null;
@@ -209,6 +129,27 @@ export async function ensureFirebase(): Promise<{ auth: Auth | null; db: Firesto
       }
       // Initialize db
       try { if (app) db = getFirestore(app); } catch {}
+      // Optional features (never block auth)
+      if (typeof window !== 'undefined' && db) {
+        try {
+          enableIndexedDbPersistence(db).catch((err: any) => {
+            if (err?.code === 'failed-precondition') {
+              console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+            } else if (err?.code === 'unimplemented') {
+              console.warn('Persistence not supported in this browser.');
+            } else {
+              console.warn('Offline persistence disabled:', err?.message || err);
+            }
+          });
+        } catch (e) {
+          console.warn('Skipping persistence setup:', e);
+        }
+        try {
+          isSupported()
+            .then((yes) => { if (yes) { try { getAnalytics(app!); } catch {} } })
+            .catch(() => {});
+        } catch {}
+      }
     })();
   }
   await initPromise;
