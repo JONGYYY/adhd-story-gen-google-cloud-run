@@ -30,8 +30,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Get the session cookie (support host-only and domain cookies)
-  const session = request.cookies.get('session')?.value || request.headers.get('cookie')?.includes('session=') ? '1' : '';
-  const isLoggedIn = !!session;
+  // Prefer cookie helper, but also scan header to avoid framework edge-cases
+  const hasCookieHelper = !!request.cookies.get('session')?.value;
+  const hasCookieHeader = (request.headers.get('cookie') || '').includes('session=');
+  const isLoggedIn = hasCookieHelper || hasCookieHeader;
 
   // If the path is protected and user is not logged in
   if (protectedPaths.some(p => path.startsWith(p)) && !isLoggedIn) {

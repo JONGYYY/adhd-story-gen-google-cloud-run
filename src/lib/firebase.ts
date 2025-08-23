@@ -102,4 +102,18 @@ if (typeof window !== 'undefined' && app) {
 }
 
 export type { Auth };
-export { auth, db }; 
+export { auth, db };
+
+// Helper to safely retrieve a client-side Auth instance on demand
+export function getClientAuth(): Auth | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    if (getApps().length === 0) {
+      try { initializeApp(firebaseConfig); } catch {}
+    }
+    return getAuth();
+  } catch (e) {
+    console.warn('getClientAuth failed:', e);
+    return null;
+  }
+}

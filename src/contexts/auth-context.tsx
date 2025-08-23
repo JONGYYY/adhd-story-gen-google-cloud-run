@@ -12,7 +12,7 @@ import {
   signInWithPopup,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth, Auth } from '@/lib/firebase';
+import { auth, Auth, getClientAuth } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -74,14 +74,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Handle auth state changes
   useEffect(() => {
-    // Check if Firebase auth is properly initialized
-    if (!auth) {
+    // Ensure we have a client-side auth instance (incognito-safe)
+    const effectiveAuth = auth || getClientAuth();
+    if (!effectiveAuth) {
       console.error('Firebase auth is not initialized');
       setLoading(false);
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(effectiveAuth, async (user) => {
       setUser(user);
 
       if (user) {
@@ -96,8 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('Error in auth state change:', error);
           // If session creation fails, sign out
           try {
-            if (auth) {
-              await signOut(auth);
+            const a = effectiveAuth || auth || getClientAuth();
+            if (a) {
+              await signOut(a);
             }
           } catch {}
           setUser(null);
