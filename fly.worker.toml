@@ -2,7 +2,7 @@ app = "taleo-worker"
 primary_region = "iad"
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = "Dockerfile.worker"
 
 [processes]
   app = "npx tsx src/queue/boot.ts"
