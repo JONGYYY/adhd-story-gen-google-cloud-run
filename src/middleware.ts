@@ -29,9 +29,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Get the session cookie (simple check - detailed verification happens in API routes)
-  const session = request.cookies.get('session')?.value;
-  const isLoggedIn = !!session; // Simple check - just verify cookie exists
+  // Get the session cookie (support host-only and domain cookies)
+  const session = request.cookies.get('session')?.value || request.headers.get('cookie')?.includes('session=') ? '1' : '';
+  const isLoggedIn = !!session;
 
   // If the path is protected and user is not logged in
   if (protectedPaths.some(p => path.startsWith(p)) && !isLoggedIn) {
