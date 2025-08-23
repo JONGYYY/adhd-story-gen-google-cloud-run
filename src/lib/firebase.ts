@@ -40,74 +40,65 @@ if (missingKeys.length > 0) {
   }
 }
 
-// Initialize Firebase only if we have the required configuration
+// Initialize Firebase (robust to incognito/private mode)
 let app: FirebaseApp | undefined;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
+console.log('Attempting to initialize Firebase...');
 try {
-  console.log('Attempting to initialize Firebase...');
-  console.log('Existing apps:', getApps().length);
-  
   if (getApps().length === 0) {
-    console.log('Initializing new Firebase app...');
     app = initializeApp(firebaseConfig);
-    console.log('Firebase app initialized successfully');
   } else {
-    console.log('Using existing Firebase app...');
     app = getApps()[0];
   }
-  
-  console.log('Getting Firebase auth...');
-  auth = getAuth(app);
-  console.log('Firebase auth obtained:', !!auth);
-  
-  console.log('Getting Firebase Firestore...');
-  db = getFirestore(app);
-  console.log('Firebase Firestore obtained:', !!db);
+} catch (e) {
+  console.error('initializeApp failed:', e);
+}
 
-  // Enable offline persistence only on client side
-  if (typeof window !== 'undefined') {
-    console.log('Enabling offline persistence...');
-    enableIndexedDbPersistence(db)
-      .then(() => console.log('Offline persistence enabled'))
-      .catch((err) => {
-        if (err.code === 'failed-precondition') {
-          console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
-        } else if (err.code === 'unimplemented') {
-          console.warn('The current browser doesn\'t support persistence.');
-        } else {
-          console.error('Failed to enable offline persistence:', err);
-        }
-      });
+try {
+  if (app) {
+    auth = getAuth(app);
   }
+} catch (e) {
+  console.error('getAuth failed:', e);
+}
 
-  // Initialize Analytics only on client side
-  let analytics = null;
-  if (typeof window !== 'undefined') {
-    console.log('Checking analytics support...');
-    isSupported().then(yes => {
-      if (yes) {
-        console.log('Analytics supported, initializing...');
-        getAnalytics(app!);
-        console.log('Analytics initialized');
+try {
+  if (app) {
+    db = getFirestore(app);
+  }
+} catch (e) {
+  console.error('getFirestore failed:', e);
+}
+
+// Optional features (never block auth)
+if (typeof window !== 'undefined' && db) {
+  try {
+    enableIndexedDbPersistence(db).catch((err: any) => {
+      if (err?.code === 'failed-precondition') {
+        console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+      } else if (err?.code === 'unimplemented') {
+        console.warn('Persistence not supported in this browser.');
       } else {
-        console.log('Analytics not supported');
+        console.warn('Offline persistence disabled:', err?.message || err);
       }
-    })
-    .catch(err => console.error('Failed to initialize analytics:', err));
+    });
+  } catch (e) {
+    console.warn('Skipping persistence setup:', e);
   }
-  
-  console.log('Firebase initialization completed successfully');
-} catch (error) {
-  console.error('Failed to initialize Firebase:', error);
-  console.error('Error details:', {
-    message: error instanceof Error ? error.message : 'Unknown error',
-    stack: error instanceof Error ? error.stack : undefined
-  });
-  // Create fallback objects to prevent crashes
-  auth = null;
-  db = null;
+}
+
+if (typeof window !== 'undefined' && app) {
+  try {
+    isSupported()
+      .then((yes) => {
+        if (yes) {
+          try { getAnalytics(app!); } catch {}
+        }
+      })
+      .catch(() => {});
+  } catch {}
 }
 
 export type { Auth };
