@@ -1,5 +1,14 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
+import {
+  getAuth,
+  initializeAuth,
+  setPersistence,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
+  inMemoryPersistence,
+  browserPopupRedirectResolver,
+  Auth,
+} from 'firebase/auth';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
@@ -56,12 +65,33 @@ try {
   console.error('initializeApp failed:', e);
 }
 
-try {
-  if (app) {
-    auth = getAuth(app);
+// Initialize Auth only in the browser, with robust persistence fallbacks
+if (typeof window !== 'undefined' && app) {
+  try {
+    // Prefer explicit initialization with available persistences
+    auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch (e) {
+    // Fallback to default getAuth
+    try {
+      auth = getAuth(app);
+    } catch (e2) {
+      console.warn('initializeAuth/getAuth failed, falling back to in-memory:', e2);
+      try {
+        auth = getAuth();
+      } catch {}
+    }
   }
-} catch (e) {
-  console.error('getAuth failed:', e);
+  // Ensure a persistence is set even in restricted modes (e.g., Safari Private)
+  try {
+    if (auth) {
+      setPersistence(auth as any, browserLocalPersistence).catch(() => {
+        try { setPersistence(auth as any, inMemoryPersistence as any); } catch {}
+      });
+    }
+  } catch {}
 }
 
 try {
