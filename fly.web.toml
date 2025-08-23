@@ -1,4 +1,4 @@
-app = "taleo-web"
+app = "adhd-story-gen-google-cloud-run"
 primary_region = "iad"
 
 [build]
