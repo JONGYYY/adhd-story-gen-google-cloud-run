@@ -23,6 +23,7 @@ primary_region = "iad"
 
 [checks]
   [checks.http]
+    type = "http"
     port = 8080
     path = "/api/health"
     interval = "15s"
