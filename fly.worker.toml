@@ -5,4 +5,4 @@ primary_region = "iad"
   dockerfile = "Dockerfile"
 
 [processes]
-  app = "npx tsx src/queue/worker.ts"
+  app = "npx tsx src/queue/boot.ts"
