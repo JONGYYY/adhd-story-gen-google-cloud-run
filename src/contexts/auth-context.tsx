@@ -12,7 +12,7 @@ import {
   signInWithPopup,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth, Auth, getClientAuth } from '@/lib/firebase';
+import { auth, Auth, getClientAuth, ensureFirebase } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -75,7 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Handle auth state changes
   useEffect(() => {
     // Ensure we have a client-side auth instance (incognito-safe)
-    const effectiveAuth = auth || getClientAuth();
+    const setup = async () => {
+      await ensureFirebase();
+    };
+    setup().catch(() => {});
+    const effectiveAuth = getClientAuth() || auth;
     if (!effectiveAuth) {
       console.error('Firebase auth is not initialized');
       setLoading(false);

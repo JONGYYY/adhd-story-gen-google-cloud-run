@@ -63,6 +63,7 @@ console.log('Firebase config check:', {
 let app: FirebaseApp | undefined;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let initPromise: Promise<void> | null = null;
 
 console.log('Attempting to initialize Firebase...');
 try {
@@ -156,4 +157,60 @@ export function getClientAuth(): Auth | null {
     console.warn('getClientAuth failed:', e);
     return null;
   }
+}
+
+function hasFullConfig(cfg: Record<string, any>): boolean {
+  return !!(cfg.apiKey && cfg.authDomain && cfg.projectId && cfg.storageBucket && cfg.messagingSenderId && cfg.appId);
+}
+
+async function loadConfigIfNeeded(): Promise<void> {
+  if (typeof window === 'undefined') return; // server already has envs
+  if (hasFullConfig(firebaseConfig)) return;
+  try {
+    const res = await fetch('/api/public/firebase-config', { cache: 'no-store' });
+    const j = await res.json();
+    if (j?.success && j?.firebase) {
+      firebaseConfig = { ...firebaseConfig, ...j.firebase } as any;
+    }
+  } catch {}
+}
+
+export async function ensureFirebase(): Promise<{ auth: Auth | null; db: Firestore | null }> {
+  if (!initPromise) {
+    initPromise = (async () => {
+      await loadConfigIfNeeded();
+      // Initialize app if needed
+      try {
+        if (getApps().length === 0) {
+          app = initializeApp(firebaseConfig as any);
+        } else {
+          app = getApps()[0];
+        }
+      } catch (e) {
+        console.warn('initializeApp error:', e);
+      }
+      // Initialize auth on client
+      if (typeof window !== 'undefined') {
+        try {
+          auth = initializeAuth(app!, {
+            persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+            popupRedirectResolver: browserPopupRedirectResolver,
+          });
+        } catch (e) {
+          try { auth = getAuth(app!); } catch {}
+        }
+        try {
+          if (auth) {
+            setPersistence(auth as any, browserLocalPersistence).catch(() => {
+              try { setPersistence(auth as any, inMemoryPersistence as any); } catch {}
+            });
+          }
+        } catch {}
+      }
+      // Initialize db
+      try { if (app) db = getFirestore(app); } catch {}
+    })();
+  }
+  await initPromise;
+  return { auth, db };
 }
