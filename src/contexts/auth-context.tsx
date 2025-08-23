@@ -113,38 +113,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const signIn = async (email: string, password: string) => {
-    if (!auth) {
+    const a = getClientAuth() || auth;
+    if (!a) {
       throw new Error('Firebase auth is not initialized');
     }
-    const result = await signInWithEmailAndPassword(auth, email, password);
+    const result = await signInWithEmailAndPassword(a, email, password);
     await createSession(result.user);
     router.push(getRedirectPath());
   };
 
   const signUp = async (email: string, password: string) => {
-    if (!auth) {
+    const a = getClientAuth() || auth;
+    if (!a) {
       throw new Error('Firebase auth is not initialized');
     }
-    const result = await createUserWithEmailAndPassword(auth, email, password);
+    const result = await createUserWithEmailAndPassword(a, email, password);
     await createSession(result.user);
     router.push(getRedirectPath());
   };
 
   const signInWithGoogle = async () => {
-    if (!auth) {
+    const a = getClientAuth() || auth;
+    if (!a) {
       throw new Error('Firebase auth is not initialized');
     }
     const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
+    let result;
+    try {
+      result = await signInWithPopup(a, provider);
+    } catch (err: any) {
+      // Fallback to redirect in environments where popup is blocked
+      if (err?.code === 'auth/operation-not-supported-in-this-environment') {
+        // Redirect flow will navigate away; no further code runs here
+        // but keeping a return to satisfy typing
+        // @ts-ignore
+        return (await import('firebase/auth')).signInWithRedirect(a, provider);
+      }
+      throw err;
+    }
     await createSession(result.user);
     router.push(getRedirectPath());
   };
 
   const logout = async () => {
-    if (!auth) {
+    const a = getClientAuth() || auth;
+    if (!a) {
       throw new Error('Firebase auth is not initialized');
     }
-    await signOut(auth);
+    await signOut(a);
     // Clear the session cookie
     try {
       await fetch('/api/auth/logout', {
@@ -157,10 +173,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    if (!auth) {
+    const a = getClientAuth() || auth;
+    if (!a) {
       throw new Error('Firebase auth is not initialized');
     }
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(a, email);
   };
 
   return (
