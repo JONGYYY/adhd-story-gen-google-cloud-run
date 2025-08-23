@@ -3,6 +3,7 @@ import { setVideoGenerating, updateProgress, setVideoReady, setVideoFailed } fro
 import { generateVideo } from '@/lib/video-generator';
 import { EnqueueVideoPayload } from './types';
 import { isR2Configured, uploadFileToR2 } from '@/lib/storage/r2';
+import { isS3Configured, uploadFileToS3 } from '@/lib/storage/s3';
 import path from 'path';
 
 async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: () => void): Promise<T> {
@@ -21,10 +22,12 @@ async function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: () => void):
 }
 
 async function uploadIfConfigured(localPath: string, videoId: string): Promise<string> {
+	const key = `videos/${videoId}.mp4`;
+	if (isS3Configured()) {
+		return await uploadFileToS3(localPath, key, 'video/mp4');
+	}
 	if (isR2Configured()) {
-		const key = `videos/${videoId}.mp4`;
-		const url = await uploadFileToR2(localPath, key, 'video/mp4');
-		return url;
+		return await uploadFileToR2(localPath, key, 'video/mp4');
 	}
 	// Fallback: serve from API
 	return `/api/videos/${path.basename(localPath)}`;
