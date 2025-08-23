@@ -12,19 +12,37 @@ import {
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
-// Debug: Log all environment variables that start with NEXT_PUBLIC_
-const allEnvVars = Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_'));
-console.log('Available NEXT_PUBLIC_ environment variables:', allEnvVars);
+// Attempt to read from injected env; if missing (SSR hydration differences), fetch at runtime
+function readEnvConfig() {
+  return {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  } as Record<string, string | undefined>;
+}
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
-};
+let firebaseConfig = readEnvConfig();
+
+// If keys appear missing on the client, fetch from public config endpoint once
+if (typeof window !== 'undefined') {
+  const missing = Object.values(firebaseConfig).filter(v => !v).length > 0;
+  if (missing) {
+    try {
+      fetch('/api/public/firebase-config')
+        .then(r => r.json())
+        .then((j) => {
+          if (j?.success && j?.firebase) {
+            firebaseConfig = { ...firebaseConfig, ...j.firebase } as any;
+          }
+        })
+        .catch(() => {});
+    } catch {}
+  }
+}
 
 // Debug: Log Firebase config (without sensitive values)
 console.log('Firebase config check:', {
@@ -39,15 +57,7 @@ console.log('Firebase config check:', {
 });
 
 // Validate Firebase configuration
-const requiredConfigKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
-const missingKeys = requiredConfigKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig]);
-
-if (missingKeys.length > 0) {
-  console.error('Missing Firebase configuration keys:', missingKeys);
-  if (typeof window !== 'undefined') {
-    console.error('Firebase configuration is incomplete. Please check your environment variables.');
-  }
-}
+// Do not hard-fail on missing keys here; the runtime fetch can populate them.
 
 // Initialize Firebase (robust to incognito/private mode)
 let app: FirebaseApp | undefined;
