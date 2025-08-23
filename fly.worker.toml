@@ -5,4 +5,4 @@ primary_region = "iad"
   dockerfile = "Dockerfile"
 
 [processes]
-  app = ["npm", "run", "worker"] 
+  app = "npm run worker" 
