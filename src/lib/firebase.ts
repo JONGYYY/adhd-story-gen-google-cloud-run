@@ -85,7 +85,6 @@ function hasFullConfig(cfg: Record<string, any>): boolean {
 
 async function loadConfigIfNeeded(): Promise<void> {
   if (typeof window === 'undefined') return; // server already has envs
-  if (hasFullConfig(firebaseConfig)) return;
   try {
     const res = await fetch('/api/public/firebase-config', { cache: 'no-store' });
     const j = await res.json();
