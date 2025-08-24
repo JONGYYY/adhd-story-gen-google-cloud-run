@@ -9,15 +9,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('🎬 Received Remotion test video generation request:', body);
 
-    // Disable this endpoint during build to avoid webpack issues
-    if (process.env.NODE_ENV === 'production' && !process.env.RAILWAY_ENVIRONMENT) {
-      return NextResponse.json({
-        success: false,
-        error: 'Remotion video generation not available in this environment',
-        videoId
-      }, { status: 503 });
-    }
-
     const { background = 'minecraft' } = body;
 
     // Set initial status
@@ -70,7 +61,7 @@ async function generateRemotionTestVideo(
     await updateProgress(videoId, 25);
     console.log('Generating test content...');
     
-    const testStory = "This is a test story for Remotion video generation. It should create a simple video with background and text overlay.";
+    const testStory = "This is a short Remotion test. It should render quickly with a basic background and overlay text.";
     
     // Generate video using Remotion
     const result = await generator.generateVideo({
