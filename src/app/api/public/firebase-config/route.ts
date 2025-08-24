@@ -16,7 +16,11 @@ export async function GET() {
       measurementId: env['NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID'] || '',
     };
 
-    return NextResponse.json({ success: true, firebase: cfg });
+    const presence = Object.fromEntries(
+      Object.entries(cfg).map(([k, v]) => [k, v ? { present: true, length: v.length, preview: v.slice(0, 6) } : { present: false }])
+    );
+
+    return NextResponse.json({ success: true, firebase: cfg, presence });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e?.message || 'failed' }, { status: 500 });
   }
