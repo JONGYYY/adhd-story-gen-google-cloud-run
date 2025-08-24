@@ -74,19 +74,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Handle auth state changes
   useEffect(() => {
-    // Ensure we have a client-side auth instance (incognito-safe)
-    const setup = async () => {
-      await ensureFirebase();
-    };
-    setup().catch(() => {});
-    const effectiveAuth = getClientAuth() || auth;
-    if (!effectiveAuth) {
-      console.error('Firebase auth is not initialized');
-      setLoading(false);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(effectiveAuth, async (user) => {
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        await ensureFirebase();
+        const effectiveAuth = getClientAuth() || auth;
+        if (!effectiveAuth) {
+          console.error('Firebase auth is not initialized');
+          setLoading(false);
+          return;
+        }
+        unsub = onAuthStateChanged(effectiveAuth, async (user) => {
       setUser(user);
 
       if (user) {
@@ -111,9 +109,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setLoading(false);
-    });
+        });
+      } catch (e) {
+        console.error('Auth setup failed:', e);
+        setLoading(false);
+      }
+    })();
 
-    return () => unsubscribe();
+    return () => { try { unsub && unsub(); } catch {} };
   }, [router]);
 
   const signIn = async (email: string, password: string) => {
