@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+import { getQueue } from '@/queue';
 
 // Ensure Node runtime and dynamic route
 export const runtime = 'nodejs';
@@ -93,9 +94,24 @@ export async function POST(request: NextRequest) {
 
 	try {
 		console.log('Received video generation request (safe):', safeLogOptions(options));
-		setTimeout(() => {
-			startLocalGeneration(options, videoId).catch((err) => console.error('Background generation error:', err));
-		}, 0);
+		const useQueue = !!process.env.REDIS_URL && process.env.USE_QUEUE === '1';
+		if (useQueue) {
+			const queue = getQueue();
+			if (queue) {
+				await queue.add('generate', { videoId, options, requestedAt: Date.now() }, { removeOnComplete: 100, removeOnFail: 100 });
+				console.log('Enqueued job to Redis queue');
+			} else {
+				console.warn('USE_QUEUE=1 but queue unavailable; falling back to in-process generation');
+				setTimeout(() => {
+					startLocalGeneration(options, videoId).catch((err) => console.error('Background generation error:', err));
+				}, 0);
+			}
+		} else {
+			setTimeout(() => {
+				startLocalGeneration(options, videoId).catch((err) => console.error('Background generation error:', err));
+			}, 0);
+			console.log('Started in-process background generation');
+		}
 		const response = { success: true, videoId, message: 'Video generation started' };
 		console.log('Returning response:', response);
 		return NextResponse.json(response);
