@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const env = process.env as Record<string, string | undefined>;
+    const nodeProcess = await import('process');
+    const env = nodeProcess.env as Record<string, string | undefined>;
     const cfg = {
       apiKey: env['NEXT_PUBLIC_FIREBASE_API_KEY'] || '',
       authDomain: env['NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN'] || '',
