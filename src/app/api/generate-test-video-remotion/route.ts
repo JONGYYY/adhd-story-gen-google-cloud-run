@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { setVideoGenerating, updateProgress, setVideoReady, setVideoFailed } from '@/lib/video-generator/status';
 import { v4 as uuidv4 } from 'uuid';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const videoId = uuidv4();
   
