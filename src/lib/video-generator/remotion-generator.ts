@@ -244,11 +244,17 @@ export class RemotionVideoGenerator {
 	}
 	
 	private async moveToFinalLocation(tempPath: string, jobId: string): Promise<string> {
-		const { rename, access } = await import('fs/promises');
-		const finalPath = join(this.tempDir, `output_${jobId}.mp4`);
+		const { rename, access, copyFile } = await import('fs/promises');
+		// Move the final file to the tmp root so our /api/videos/[filename] route can serve it
+		const finalPath = join(tmpdir(), `output_${jobId}.mp4`);
 		try {
 			await access(tempPath);
-			await rename(tempPath, finalPath);
+			try {
+				await rename(tempPath, finalPath);
+			} catch {
+				// Cross-device rename fallback
+				await copyFile(tempPath, finalPath);
+			}
 			console.log(`✅ Video moved to final location: ${finalPath}`);
 			return finalPath;
 		} catch (error: any) {
