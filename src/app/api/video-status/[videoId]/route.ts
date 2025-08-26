@@ -79,7 +79,7 @@ export async function GET(
   { params }: { params: { videoId: string } }
 ) {
   try {
-    // First, try to get local status
+    // First, try to get local/redis-backed status
     const localStatus = await getVideoStatus(params.videoId);
     
     // If local status is not_found, try Railway API
@@ -111,8 +111,8 @@ export async function GET(
         });
       }
     } else {
-      // Return local status if found
-      console.log('Found local video status:', JSON.stringify(localStatus, null, 2));
+      // Return status (no-store headers to avoid caching)
+      console.log('Found video status:', JSON.stringify(localStatus, null, 2));
       return new Response(JSON.stringify(localStatus), {
         status: 200,
         headers: {
