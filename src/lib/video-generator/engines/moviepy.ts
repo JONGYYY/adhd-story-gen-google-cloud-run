@@ -129,14 +129,34 @@ export class MoviePyEngine implements IVideoEngine {
 			// Ensure background exists or create/download a simple placeholder
 			const expectedBgPath = jobConfig.bgSpec.clips[0];
 			console.log(`🔍 Checking for background at: ${expectedBgPath}`);
-			
 			try {
 				const bgStats = await fs.stat(expectedBgPath);
 				console.log(`🎞️ Background clip found: ${expectedBgPath} (${bgStats.size} bytes)`);
 			} catch (bgError) {
 				console.warn(`⚠️ Background clip missing at ${expectedBgPath}:`, bgError);
-				console.warn('⚠️ Will synthesize placeholder background inside Python');
-				jobConfig.bgSpec.clips[0] = 'PLACEHOLDER';
+				// Try to fetch from BACKGROUND_BASE_URL if provided
+				const base = process.env.BACKGROUND_BASE_URL || '';
+				if (/^https?:\/\//i.test(base)) {
+					try {
+						const url = `${base.replace(/\/$/, '')}/${input.background.category}/1.mp4`;
+						const target = path.join(jobDir, 'bg_remote.mp4');
+						console.log(`🌐 Attempting to download background from: ${url}`);
+						const res = await fetch(url, { cache: 'no-store' });
+						if (!res.ok) throw new Error(`HTTP ${res.status}`);
+						const arr = await res.arrayBuffer();
+						const buf = Buffer.from(arr);
+						await fs.writeFile(target, buf);
+						if (buf.length < 1024 * 1024) throw new Error(`Downloaded file too small: ${buf.length} bytes`);
+						jobConfig.bgSpec.clips[0] = target;
+						console.log(`✅ Downloaded remote background to ${target} (${buf.length} bytes)`);
+					} catch (e) {
+						console.warn('⚠️ Remote background download failed, will synthesize placeholder:', (e as any)?.message || e);
+						jobConfig.bgSpec.clips[0] = 'PLACEHOLDER';
+					}
+				} else {
+					console.warn('⚠️ BACKGROUND_BASE_URL not set; will synthesize placeholder background');
+					jobConfig.bgSpec.clips[0] = 'PLACEHOLDER';
+				}
 			}
 
 			// Copy story alignment to expected location

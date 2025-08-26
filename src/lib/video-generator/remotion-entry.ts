@@ -1,6 +1,7 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
+import { createWriteStream } from 'fs';
 import { updateProgress, setVideoFailed } from './status';
 import type { VideoGenerationOptions } from './types';
 
@@ -19,14 +20,44 @@ async function downloadToFile(url: string, destPath: string, videoId: string): P
   const res = await fetchWithTimeout(url, 30000).catch((e) => {
     throw new Error(`Timeout or network error downloading ${url}: ${e?.message || e}`);
   });
-  if (!res.ok) {
+  if (!res.ok || !res.body) {
     throw new Error(`Failed to download background ${url}: ${res.status} ${res.statusText}`);
   }
-  const arr = await res.arrayBuffer();
-  const buf = Buffer.from(arr);
-  await fs.writeFile(destPath, buf);
-  console.log(`[${videoId}] ✅ Downloaded ${buf.length} bytes to ${destPath}`);
-  return buf.length;
+
+  const total = parseInt(res.headers.get('content-length') || '0', 10);
+  const fileStream = createWriteStream(destPath);
+  const reader = (res.body as any).getReader?.();
+
+  if (!reader) {
+    // Fallback: no reader available, buffer whole body
+    const arr = await res.arrayBuffer();
+    const buf = Buffer.from(arr);
+    await fs.writeFile(destPath, buf);
+    console.log(`[${videoId}] ✅ Downloaded ${buf.length} bytes to ${destPath}`);
+    return buf.length;
+  }
+
+  let received = 0;
+  let lastReported = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      fileStream.write(value);
+      received += value.length || value.byteLength || 0;
+      if (total > 0) {
+        const pct = Math.floor((received / total) * 40); // map 0..100% -> 0..40 progress points
+        if (pct > lastReported) {
+          lastReported = pct;
+          try { await updateProgress(videoId, 5 + pct); } catch {}
+        }
+      }
+    }
+  }
+  await new Promise<void>((r) => fileStream.end(r));
+  console.log(`[${videoId}] ✅ Downloaded ${received} bytes to ${destPath}`);
+  return received;
 }
 
 async function tryDownloadWithRetries(url: string, destPath: string, videoId: string): Promise<number> {
@@ -49,16 +80,27 @@ async function tryDownloadWithRetries(url: string, destPath: string, videoId: st
 async function resolveBackgroundLocalPath(category: string, videoId: string): Promise<string> {
   const preferredClip = '1.mp4';
   const baseUrl = process.env.BACKGROUND_BASE_URL || '';
-  const tmpPath = path.join(os.tmpdir(), `bg_${videoId}.mp4`);
+  const cacheDir = path.join(os.tmpdir(), 'bg_cache');
+  const cachePath = path.join(cacheDir, `${category}_${preferredClip}`);
 
   // If BACKGROUND_BASE_URL points to http(s), download it
   if (/^https?:\/\//i.test(baseUrl)) {
+    try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
+    // Use cached file if present and sane size
+    try {
+      const st = await fs.stat(cachePath);
+      if (st.size > 1024 * 1024) {
+        console.log(`[${videoId}] ♻️ Using cached background: ${cachePath} (${st.size} bytes)`);
+        return cachePath;
+      }
+    } catch {}
+
     const url = `${baseUrl.replace(/\/$/, '')}/${category}/${preferredClip}`;
-    const bytes = await tryDownloadWithRetries(url, tmpPath, videoId);
+    const bytes = await tryDownloadWithRetries(url, cachePath, videoId);
     if (bytes < 1024 * 1024) {
       throw new Error(`Background file too small (${bytes} bytes) from ${url}`);
     }
-    return tmpPath;
+    return cachePath;
   }
 
   // Otherwise, try local public file
@@ -83,8 +125,9 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     await fs.copyFile(bgLocalPath, finalPath);
 
     await updateProgress(videoId, 100);
-    console.log(`[${videoId}] 🎉 Remotion stub finished: ${finalPath}`);
-    return finalPath;
+    const finalUrl = `/api/videos/${path.basename(finalPath)}`;
+    console.log(`[${videoId}] 🎉 Remotion stub finished: ${finalUrl}`);
+    return finalUrl;
   } catch (e: any) {
     console.error(`[${videoId}] ❌ Remotion generation failed: ${e?.message || e}`);
     try { await setVideoFailed(videoId, e?.message || 'Remotion generation failed'); } catch {}
