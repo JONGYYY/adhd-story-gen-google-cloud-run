@@ -13,25 +13,25 @@ export default function Editor() {
     {
       id: 'minecraft',
       name: 'Minecraft',
-      thumbnail: '/backgrounds/minecraft.jpg',
+      thumbnail: '/banners/redditbannertop.png',
       category: 'Gaming',
     },
     {
       id: 'subway',
       name: 'Subway Surfers',
-      thumbnail: '/backgrounds/subway.jpg',
+      thumbnail: '/banners/redditbannerbottom.png',
       category: 'Gaming',
     },
     {
       id: 'cooking',
       name: 'Cooking',
-      thumbnail: '/backgrounds/cooking.jpg',
+      thumbnail: '/globe.svg',
       category: 'Lifestyle',
     },
     {
       id: 'parkour',
       name: 'Parkour',
-      thumbnail: '/backgrounds/parkour.jpg',
+      thumbnail: '/file.svg',
       category: 'Sports',
     },
   ];

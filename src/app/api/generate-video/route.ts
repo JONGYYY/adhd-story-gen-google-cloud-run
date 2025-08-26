@@ -114,7 +114,14 @@ export async function POST(request: NextRequest) {
 		}
 		const response = { success: true, videoId, message: 'Video generation started' };
 		console.log('Returning response:', response);
-		return NextResponse.json(response);
+		return new NextResponse(JSON.stringify(response), {
+			status: 200,
+			headers: {
+				'Content-Type': 'application/json',
+				'Cache-Control': 'no-store',
+				'Pragma': 'no-cache'
+			}
+		});
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : 'Failed to start video generation';
 		console.error('Error starting video generation:', error);

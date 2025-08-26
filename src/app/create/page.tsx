@@ -70,25 +70,25 @@ export default function Create() {
     {
       id: 'minecraft',
       name: 'Minecraft Parkour',
-      thumbnail: '/backgrounds/minecraft.jpg',
+      thumbnail: '/banners/redditbannertop.png',
       category: 'Gaming',
     },
     {
       id: 'subway',
       name: 'Subway Surfers',
-      thumbnail: '/backgrounds/subway.jpg',
+      thumbnail: '/banners/redditbannerbottom.png',
       category: 'Gaming',
     },
     {
       id: 'cooking',
       name: 'Cooking',
-      thumbnail: '/backgrounds/cooking.jpg',
+      thumbnail: '/globe.svg',
       category: 'Lifestyle',
     },
     {
       id: 'workers',
       name: 'Workers',
-      thumbnail: '/backgrounds/workers.jpg',
+      thumbnail: '/file.svg',
       category: 'Lifestyle',
     }
   ];

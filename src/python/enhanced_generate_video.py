@@ -136,14 +136,14 @@ class EnhancedVideoGenerator:
             return 1.0 + 0.08 * (1.0 - p)
         animated_clip = base_clip.resize(scale_at_time)
         
-        # Position at vertical center of video
+        # Position at center of video
         video_width, video_height = video_size
         caption_x = (video_width - img_width) // 2
         caption_y = (video_height - img_height) // 2
         
         return animated_clip.set_position((caption_x, caption_y))
 
-    def create_word_captions(self, alignment_data: list, video_size: tuple, style: dict = None) -> list:
+    def create_word_captions(self, alignment_data: list, video_size: tuple, style: dict = None, start_offset: float = 0.0) -> list:
         """Create caption clips for all words with proper timing"""
         logger.info(f"Creating captions for {len(alignment_data)} words")
         
@@ -154,8 +154,8 @@ class EnhancedVideoGenerator:
                 # Create caption for this word
                 caption_clip = self.create_kinetic_caption(word_data, video_size, style)
                 
-                # Set timing
-                caption_clip = caption_clip.set_start(word_data['start']).set_duration(
+                # Set timing with offset for title audio duration
+                caption_clip = caption_clip.set_start(start_offset + word_data['start']).set_duration(
                     word_data['end'] - word_data['start']
                 )
                 
@@ -168,7 +168,7 @@ class EnhancedVideoGenerator:
         logger.info(f"Successfully created {len(caption_clips)} caption clips")
         return caption_clips
 
-    def generate_video(self, audio_path: str, background_path: str, banner_path: str, 
+    def generate_video(self, title_audio_path: str | None, story_audio_path: str, background_path: str, banner_path: str, 
                       output_path: str, story_data: dict, alignment_path: str):
         """Generate the final video with all components"""
         try:
@@ -176,9 +176,19 @@ class EnhancedVideoGenerator:
             self.report_progress(10, "Loading assets")
             
             # Load audio
-            audio_clip = AudioFileClip(audio_path)
-            total_duration = audio_clip.duration
-            logger.info(f"Audio duration: {total_duration:.2f}s")
+            title_audio = None
+            title_duration = 0.0
+            if title_audio_path and os.path.exists(title_audio_path):
+                try:
+                    title_audio = AudioFileClip(title_audio_path)
+                    title_duration = float(title_audio.duration)
+                except Exception as e:
+                    logger.warning(f"Failed to load title audio: {e}")
+                    title_audio = None
+                    title_duration = 0.0
+            story_audio = AudioFileClip(story_audio_path)
+            total_duration = title_duration + story_audio.duration
+            logger.info(f"Audio durations - title: {title_duration:.2f}s, story: {story_audio.duration:.2f}s")
             
             # Load and prepare background
             background_clip = VideoFileClip(background_path)
@@ -197,7 +207,7 @@ class EnhancedVideoGenerator:
                 width=target_width
             )
             
-            # Loop background to match audio duration
+            # Loop background to match total duration
             if background_clip.duration < total_duration:
                 n_loops = int(np.ceil(total_duration / background_clip.duration))
                 background_clip = concatenate_videoclips([background_clip] * n_loops)
@@ -209,43 +219,27 @@ class EnhancedVideoGenerator:
             banner_clip = None
             if os.path.exists(banner_path):
                 logger.info(f"Loading custom banner: {banner_path}")
-                # Load banner with transparency handling
                 from PIL import Image as PILImage
                 banner_img = PILImage.open(banner_path)
                 logger.info(f"Banner loaded - size: {banner_img.size}, mode: {banner_img.mode}")
-                
-                # Ensure the image has transparency
                 if banner_img.mode != 'RGBA':
                     banner_img = banner_img.convert('RGBA')
                     logger.info("Converted banner to RGBA for transparency")
-                
-                # Split into RGB + mask to avoid 4-channel broadcasting
                 banner_rgba = np.array(banner_img)
                 banner_rgb = banner_rgba[:, :, :3]
                 banner_alpha = banner_rgba[:, :, 3].astype(np.float32) / 255.0
-                
-                # Limit banner to the opening seconds only
-                banner_duration = min(3.0, max(1.5, total_duration * 0.35))
-                banner_clip = ImageClip(banner_rgb, duration=banner_duration)
-                banner_clip = banner_clip.set_mask(ImageClip(banner_alpha, ismask=True).set_duration(banner_duration))
-                
-                # Scale banner appropriately
-                banner_width = int(target_width * 0.9)  # 90% of video width
+                banner_clip = ImageClip(banner_rgb, duration=max(title_duration, 0.0001))
+                banner_clip = banner_clip.set_mask(ImageClip(banner_alpha, ismask=True).set_duration(max(title_duration, 0.0001)))
+                banner_width = int(target_width * 0.9)
                 banner_height = int(banner_width * banner_img.height / banner_img.width)
-                
-                # Ensure banner doesn't exceed reasonable height
                 max_banner_height = int(target_height * 0.3)
                 if banner_height > max_banner_height:
                     banner_height = max_banner_height
                     banner_width = int(banner_height * banner_img.width / banner_img.height)
-                
                 banner_clip = banner_clip.resize((banner_width, banner_height))
-                
-                # Center the banner vertically
                 banner_y = (target_height - banner_height) // 2
                 banner_clip = banner_clip.set_position(('center', banner_y))
-                
-                logger.info(f"Banner configured: {banner_width}x{banner_height} at y={banner_y}")
+                logger.info(f"Banner configured: {banner_width}x{banner_height} at y={banner_y}, duration={title_duration}")
             
             self.report_progress(50, "Banner prepared")
             
@@ -255,8 +249,6 @@ class EnhancedVideoGenerator:
                 logger.info(f"Loading word alignment: {alignment_path}")
                 with open(alignment_path, 'r') as f:
                     alignment_data = json.load(f)
-                
-                # Create caption style
                 caption_style = {
                     'fontSize': 75,
                     'fontFamily': 'Arial-Bold',
@@ -265,13 +257,12 @@ class EnhancedVideoGenerator:
                     'strokeWidth': 4,
                     'bouncePx': 8
                 }
-                
                 caption_clips = self.create_word_captions(
-                    alignment_data, 
-                    (target_width, target_height), 
-                    caption_style
+                    alignment_data,
+                    (target_width, target_height),
+                    caption_style,
+                    start_offset=title_duration
                 )
-                
                 logger.info(f"Created {len(caption_clips)} caption clips")
             
             self.report_progress(70, "Captions prepared")
@@ -279,18 +270,20 @@ class EnhancedVideoGenerator:
             # Compose final video
             logger.info("Compositing final video...")
             video_clips = [background_clip]
-            
             if banner_clip:
                 video_clips.append(banner_clip)
-            
             video_clips.extend(caption_clips)
-            
             final_video = CompositeVideoClip(video_clips, size=(target_width, target_height))
-            final_video = final_video.set_audio(audio_clip)
+            
+            # Build final audio: title (if any) + story
+            if title_audio is not None:
+                combined_audio = concatenate_audioclips([title_audio, story_audio])
+            else:
+                combined_audio = story_audio
+            final_video = final_video.set_audio(combined_audio)
             
             self.report_progress(80, "Compositing")
             
-            # Write final video with optimized settings
             logger.info(f"Writing final video to: {output_path}")
             final_video.write_videofile(
                 output_path,
@@ -298,11 +291,11 @@ class EnhancedVideoGenerator:
                 codec='libx264',
                 audio_codec='aac',
                 audio_bitrate='192k',
-                bitrate='6000k',  # 6 Mbps for clean text
-                preset='medium',  # Balance of quality and speed
+                bitrate='6000k',
+                preset='medium',
                 ffmpeg_params=[
-                    '-pix_fmt', 'yuv420p',  # Ensure compatibility
-                    '-movflags', '+faststart',  # Web optimization
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
                     '-profile:v', 'high',
                     '-level', '4.1'
                 ],
@@ -310,14 +303,16 @@ class EnhancedVideoGenerator:
                 remove_temp=True,
                 threads=4,
                 verbose=False,
-                logger=None  # Suppress MoviePy logs
+                logger=None
             )
             
             self.report_progress(100, "Complete")
             
             # Cleanup
             background_clip.close()
-            audio_clip.close()
+            story_audio.close()
+            if title_audio is not None:
+                title_audio.close()
             if banner_clip:
                 banner_clip.close()
             for clip in caption_clips:
@@ -331,24 +326,28 @@ class EnhancedVideoGenerator:
             raise
 
 def main():
-    if len(sys.argv) != 8:
-        print("Usage: enhanced_generate_video.py <job_id> <audio_path> <background_path> <banner_path> <output_path> <story_data_json> <alignment_path>")
+    # Now expect 9 args: job_id, title_audio_path_or_none, story_audio_path, background_path, banner_path, output_path, story_json, alignment_path
+    if len(sys.argv) != 9:
+        print("Usage: enhanced_generate_video.py <job_id> <title_audio_or_none> <story_audio_path> <background_path> <banner_path> <output_path> <story_data_json> <alignment_path>")
         sys.exit(1)
     
     job_id = sys.argv[1]
-    audio_path = sys.argv[2]
-    background_path = sys.argv[3]
-    banner_path = sys.argv[4]
-    output_path = sys.argv[5]
-    story_data_json = sys.argv[6]
-    alignment_path = sys.argv[7]
+    title_audio_arg = sys.argv[2]
+    story_audio_path = sys.argv[3]
+    background_path = sys.argv[4]
+    banner_path = sys.argv[5]
+    output_path = sys.argv[6]
+    story_data_json = sys.argv[7]
+    alignment_path = sys.argv[8]
     
     try:
         story_data = json.loads(story_data_json)
+        title_audio_path = None if title_audio_arg == 'NONE' else title_audio_arg
         
         generator = EnhancedVideoGenerator(job_id)
         generator.generate_video(
-            audio_path=audio_path,
+            title_audio_path=title_audio_path,
+            story_audio_path=story_audio_path,
             background_path=background_path,
             banner_path=banner_path,
             output_path=output_path,

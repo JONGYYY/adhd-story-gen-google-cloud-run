@@ -1,7 +1,8 @@
 moviepy==1.0.3
 openai-whisper==20231117
+opencv-python==4.9.0.80
+Pillow==10.3.0
 librosa==0.10.1
 soundfile==0.12.1
-opencv-python==4.9.0.80
-pillow==10.2.0
-numpy==1.26.4 
+tiktoken==0.7.0
+edge-tts==6.1.11 

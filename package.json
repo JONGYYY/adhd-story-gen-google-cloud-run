@@ -16,7 +16,8 @@
     "start": "next start",
     "start:railway": "next start",
     "lint": "next lint",
-    "render:local": "tsx apps/worker/src/cli.ts"
+    "render:local": "tsx apps/worker/src/cli.ts",
+    "worker": "tsx apps/worker/src/index.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

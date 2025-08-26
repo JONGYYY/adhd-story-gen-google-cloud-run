@@ -64,10 +64,12 @@ export async function setVideoGenerating(videoId: string) {
 
 export async function updateProgress(videoId: string, progress: number) {
   const status = await readStatusWithRetry(videoId);
+  const current = typeof status.progress === 'number' ? status.progress : 0;
+  const nextProgress = Math.max(current, Math.floor(progress));
   await writeStatusAtomic(videoId, {
     ...status,
     status: 'generating',
-    progress,
+    progress: nextProgress,
     updatedAt: Date.now(),
   });
 }

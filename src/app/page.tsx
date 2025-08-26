@@ -16,15 +16,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative h-screen flex items-center">
         <div className="absolute inset-0 z-0">
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full h-full object-cover opacity-20"
-          >
-            <source src="/demo-background.mp4" type="video/mp4" />
-          </video>
+          <div className="w-full h-full bg-gradient-to-b from-gray-900 to-gray-800 opacity-20" />
           <div className="absolute inset-0 bg-gradient-to-b from-gray-900/50 to-gray-900" />
         </div>
 
@@ -236,13 +228,8 @@ export default function LandingPage() {
                 />
               </svg>
             </button>
-            <div className="aspect-video rounded-lg overflow-hidden">
-              <video
-                controls
-                className="w-full h-full"
-              >
-                <source src="/demo.mp4" type="video/mp4" />
-              </video>
+            <div className="aspect-video rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
+              <img src="/globe.svg" alt="Demo placeholder" className="w-24 h-24 opacity-60" />
             </div>
           </div>
         </div>

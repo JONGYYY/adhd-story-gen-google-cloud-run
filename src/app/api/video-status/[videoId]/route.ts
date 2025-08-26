@@ -98,11 +98,11 @@ export async function GET(
         });
       } catch (railwayError) {
         console.error('Railway API error:', railwayError);
-        // If Railway also fails, return not found
+        // If Railway also fails, return a not_found status (200) so clients can keep polling
         return new Response(JSON.stringify({
-          error: 'Video status not found'
+          status: 'not_found'
         }), {
-          status: 404,
+          status: 200,
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-store',
