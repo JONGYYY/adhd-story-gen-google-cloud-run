@@ -17,7 +17,8 @@ async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): 
 
 async function downloadToFile(url: string, destPath: string, videoId: string): Promise<number> {
   console.log(`[${videoId}] 🔽 Downloading background: ${url}`);
-  const res = await fetchWithTimeout(url, 30000).catch((e) => {
+  // Allow large files: 4 minutes timeout
+  const res = await fetchWithTimeout(url, 240000).catch((e) => {
     throw new Error(`Timeout or network error downloading ${url}: ${e?.message || e}`);
   });
   if (!res.ok) {
@@ -52,8 +53,28 @@ async function downloadToFile(url: string, destPath: string, videoId: string): P
           reject(err);
         });
     });
+  } else if ((res.body as any)?.getReader) {
+    // Web ReadableStream path (Undici)
+    const reader = (res.body as any).getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        const chunk: Buffer = Buffer.isBuffer(value) ? value : Buffer.from(value);
+        fileStream.write(chunk);
+        received += chunk.length;
+        if (total > 0) {
+          const pct = Math.floor((received / total) * 40);
+          if (pct > lastReported) {
+            lastReported = pct;
+            try { await updateProgress(videoId, 5 + pct); } catch {}
+          }
+        }
+      }
+    }
+    await new Promise<void>((r) => fileStream.end(r));
   } else {
-    // Fallback to buffering
+    // Final fallback to buffering
     const arr = await res.arrayBuffer();
     const buf = Buffer.from(arr);
     await fs.writeFile(destPath, buf);
