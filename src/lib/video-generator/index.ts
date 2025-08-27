@@ -57,9 +57,11 @@ export async function generateVideo(options: VideoOptions, videoId: string): Pro
 
   // Feature flag: prefer Remotion pipeline when enabled
   if ((process.env.REMOTION_ENABLED || '').toLowerCase() === 'true') {
+    console.log(`[gen ${videoId}] REMOTION_ENABLED=true -> using Remotion pipeline`);
     return await generateVideoWithRemotion(generationOptions as any, videoId);
   }
 
   // Use the new hybrid generator with MoviePy engine and fallbacks
+  console.log(`[gen ${videoId}] REMOTION_ENABLED!=true -> using Hybrid(MoviePy) pipeline`);
   return generateHybridVideo(generationOptions as any, videoId);
 } 

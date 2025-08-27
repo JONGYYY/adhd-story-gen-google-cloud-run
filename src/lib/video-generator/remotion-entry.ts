@@ -3,13 +3,15 @@ import os from 'os';
 import fs from 'fs/promises';
 import { createWriteStream } from 'fs';
 import { updateProgress, setVideoFailed } from './status';
+import fetchOriginal from 'node-fetch';
 import type { VideoGenerationOptions } from './types';
 
-async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<Response> {
+// Use node-fetch to ensure Node Readable stream body
+async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<any> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(url, { signal: signal || controller.signal });
+    return await fetchOriginal(url, { signal: (signal as any) || (controller as any).signal }) as any;
   } finally {
     clearTimeout(t);
   }
@@ -139,7 +141,8 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
   const category = options.background?.category || 'minecraft';
 
   try {
-    await updateProgress(videoId, 5);
+    console.log(`[${videoId}] ▶️ Remotion entry starting for category=${category}`);
+    await updateProgress(videoId, 12);
 
     // Resolve or download a background clip
     const bgLocalPath = await resolveBackgroundLocalPath(category, videoId);
