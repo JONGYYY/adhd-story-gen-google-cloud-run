@@ -20,42 +20,46 @@ async function downloadToFile(url: string, destPath: string, videoId: string): P
   const res = await fetchWithTimeout(url, 30000).catch((e) => {
     throw new Error(`Timeout or network error downloading ${url}: ${e?.message || e}`);
   });
-  if (!res.ok || !res.body) {
+  if (!res.ok) {
     throw new Error(`Failed to download background ${url}: ${res.status} ${res.statusText}`);
   }
-
   const total = parseInt(res.headers.get('content-length') || '0', 10);
   const fileStream = createWriteStream(destPath);
-  const reader = (res.body as any).getReader?.();
-
-  if (!reader) {
-    // Fallback: no reader available, buffer whole body
-    const arr = await res.arrayBuffer();
-    const buf = Buffer.from(arr);
-    await fs.writeFile(destPath, buf);
-    console.log(`[${videoId}] ✅ Downloaded ${buf.length} bytes to ${destPath}`);
-    return buf.length;
-  }
-
   let received = 0;
   let lastReported = 0;
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      fileStream.write(value);
-      received += value.length || value.byteLength || 0;
-      if (total > 0) {
-        const pct = Math.floor((received / total) * 40); // map 0..100% -> 0..40 progress points
-        if (pct > lastReported) {
-          lastReported = pct;
-          try { await updateProgress(videoId, 5 + pct); } catch {}
-        }
-      }
-    }
+  if (res.body && typeof (res.body as any).pipe === 'function') {
+    // Node Readable stream path
+    await new Promise<void>((resolve, reject) => {
+      (res.body as any)
+        .on('data', async (chunk: Buffer) => {
+          fileStream.write(chunk);
+          received += chunk.length;
+          if (total > 0) {
+            const pct = Math.floor((received / total) * 40);
+            if (pct > lastReported) {
+              lastReported = pct;
+              try { await updateProgress(videoId, 5 + pct); } catch {}
+            }
+          }
+        })
+        .on('end', () => {
+          fileStream.end();
+          resolve();
+        })
+        .on('error', (err: any) => {
+          fileStream.destroy();
+          reject(err);
+        });
+    });
+  } else {
+    // Fallback to buffering
+    const arr = await res.arrayBuffer();
+    const buf = Buffer.from(arr);
+    await fs.writeFile(destPath, buf);
+    received = buf.length;
   }
-  await new Promise<void>((r) => fileStream.end(r));
+
   console.log(`[${videoId}] ✅ Downloaded ${received} bytes to ${destPath}`);
   return received;
 }

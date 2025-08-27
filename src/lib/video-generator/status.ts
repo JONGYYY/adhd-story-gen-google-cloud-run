@@ -52,11 +52,15 @@ async function ensureStatusDir() {
 }
 
 async function writeStatusAtomic(videoId: string, data: any): Promise<void> {
-  // Prefer Redis if available
+  // Prefer Redis if available, but fall back to file on any error
   const r = getRedis();
   if (r) {
-    await writeStatusRedis(videoId, data);
-    return;
+    try {
+      await writeStatusRedis(videoId, data);
+      return;
+    } catch (e) {
+      console.warn(`[status] Redis write failed for ${videoId}, falling back to file:`, (e as any)?.message || e);
+    }
   }
   await ensureStatusDir();
   const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
