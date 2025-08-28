@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import crypto from 'crypto';
 import os from 'os';
 import Redis from 'ioredis';
 
@@ -67,10 +68,24 @@ async function writeStatusAtomic(videoId: string, data: any): Promise<void> {
   }
   await ensureStatusDir();
   const statusFile = path.join(STATUS_DIR, `${videoId}.json`);
-  const tempFile = statusFile + '.tmp';
+  const tempFile = `${statusFile}.${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}.tmp`;
   const payload = JSON.stringify(data);
+  // Write to a unique temp file to avoid concurrent rename races
   await fs.writeFile(tempFile, payload);
-  await fs.rename(tempFile, statusFile);
+  // Try atomic replace with a brief retry loop in case of transient ENOENT
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await fs.rename(tempFile, statusFile);
+      return;
+    } catch (e: any) {
+      if (attempt === 2) {
+        // Best-effort cleanup
+        try { await fs.unlink(tempFile); } catch {}
+        throw e;
+      }
+      await new Promise(res => setTimeout(res, 10 * (attempt + 1)));
+    }
+  }
 }
 
 async function readStatusWithRetry(videoId: string, retries = 3, delayMs = 20): Promise<any> {
