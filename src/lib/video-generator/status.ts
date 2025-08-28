@@ -14,6 +14,9 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 let redisClient: Redis | null = null;
 function getRedis(): Redis | null {
+  // Allow explicit opt-in to avoid rate limits / flapping
+  const useRedis = (process.env.USE_REDIS_FOR_STATUS || '').trim() === '1';
+  if (!useRedis) return null;
   const url = process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL || '';
   if (!url) return null;
   if (redisClient) return redisClient;

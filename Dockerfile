@@ -70,5 +70,5 @@ EXPOSE 8080
 # Next.js expects PORT
 ENV PORT=8080
 
-# Start Next.js, bind to 0.0.0.0 for healthchecks
-CMD ["sh", "-c", "npm run start -- -p ${PORT:-8080} -H 0.0.0.0"] 
+# Start Next.js using the local project binary to avoid PATH issues
+CMD ["sh", "-c", "./node_modules/.bin/next start -p ${PORT:-8080} -H 0.0.0.0"]
