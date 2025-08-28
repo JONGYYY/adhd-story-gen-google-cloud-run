@@ -5,6 +5,7 @@ import { createWriteStream } from 'fs';
 import { updateProgress, setVideoFailed } from './status';
 import fetchOriginal from 'node-fetch';
 import type { VideoGenerationOptions } from './types';
+import AWS from 'aws-sdk';
 
 // Use node-fetch to ensure Node Readable stream body
 async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<any> {
@@ -109,6 +110,90 @@ async function resolveBackgroundLocalPath(category: string, videoId: string): Pr
   const baseUrl = process.env.BACKGROUND_BASE_URL || '';
   const cacheDir = path.join(os.tmpdir(), 'bg_cache');
   const cachePath = path.join(cacheDir, `${category}_${preferredClip}`);
+
+  // If BACKGROUND_BASE_URL points to S3, prefer AWS SDK streaming (more robust than public HTTP)
+  // Supports formats like:
+  // - https://<bucket>.s3.<region>.amazonaws.com/<prefix>
+  // - https://s3.<region>.amazonaws.com/<bucket>/<prefix>
+  const s3Match = baseUrl.match(/^https?:\/\/(?:([^.]+)\.)?s3[.-]([a-z0-9-]+)\.amazonaws\.com\/?([^\s]*)$/i);
+  const envBucket = process.env.S3_BUCKET;
+  const envRegion = process.env.S3_REGION;
+
+  if (s3Match || (envBucket && envRegion)) {
+    const bucket = envBucket || (s3Match?.[1] || s3Match?.[3]?.split('/')[0]);
+    let prefix: string | undefined;
+    let region = envRegion || s3Match?.[2];
+    if (!envBucket && s3Match) {
+      // If bucket was in the path (s3.<region>.amazonaws.com/<bucket>/<prefix>)
+      if (!s3Match[1] && s3Match[3]) {
+        const parts = s3Match[3].split('/');
+        parts.shift(); // remove bucket
+        prefix = parts.join('/');
+      } else {
+        prefix = s3Match[3];
+      }
+    } else {
+      // BACKGROUND_BASE_URL provided separately from bucket via env
+      try {
+        const u = new URL(baseUrl);
+        // everything after host as prefix
+        prefix = u.pathname.replace(/^\//, '');
+      } catch {
+        prefix = '';
+      }
+    }
+    if (!bucket || !region) {
+      console.warn(`[${videoId}] ⚠️ Could not determine S3 bucket/region from BACKGROUND_BASE_URL; falling back to HTTP`);
+    } else {
+      const key = [prefix, category, preferredClip].filter(Boolean).join('/');
+      try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
+      // Use cached file if present and sane size
+      try {
+        const st = await fs.stat(cachePath);
+        if (st.size > 1024 * 1024) {
+          console.log(`[${videoId}] ♻️ Using cached S3 background: ${cachePath} (${st.size} bytes)`);
+          return cachePath;
+        }
+      } catch {}
+
+      console.log(`[${videoId}] 🔽 Downloading background from S3 bucket=${bucket}, key=${key}`);
+      const s3 = new AWS.S3({ region });
+      // HeadObject to get total size for progress
+      const head = await s3.headObject({ Bucket: bucket, Key: key }).promise();
+      const total = Number(head.ContentLength || 0);
+      const stream = s3.getObject({ Bucket: bucket, Key: key }).createReadStream();
+      const fileStream = createWriteStream(cachePath);
+      let received = 0;
+      let lastReported = 0;
+      await new Promise<void>((resolve, reject) => {
+        stream
+          .on('data', async (chunk: Buffer) => {
+            fileStream.write(chunk);
+            received += chunk.length;
+            if (total > 0) {
+              const pct = Math.floor((received / total) * 40);
+              if (pct > lastReported) {
+                lastReported = pct;
+                try { await updateProgress(videoId, 5 + pct); } catch {}
+              }
+            }
+          })
+          .on('end', () => {
+            fileStream.end();
+            resolve();
+          })
+          .on('error', (err) => {
+            fileStream.destroy();
+            reject(err);
+          });
+      });
+      if (total && received < total) {
+        throw new Error(`S3 download incomplete: ${received}/${total} bytes`);
+      }
+      console.log(`[${videoId}] ✅ Downloaded ${received} bytes from S3 to ${cachePath}`);
+      return cachePath;
+    }
+  }
 
   // If BACKGROUND_BASE_URL points to http(s), download it
   if (/^https?:\/\//i.test(baseUrl)) {
