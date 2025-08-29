@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { spawn } = require('child_process');
+  const { spawn } = require('child_process');
 
 const port = process.env.PORT || '8080';
 const args = ['run', 'start', '--', '-p', String(port), '-H', '0.0.0.0'];
@@ -24,7 +24,7 @@ process.on('SIGINT', shutdown('SIGINT'));
 child.on('exit', (code, signal) => {
 	if (signal) {
 		process.exit(0);
-	} else {
+  } else {
 		process.exit(code || 0);
 	}
 }); 
