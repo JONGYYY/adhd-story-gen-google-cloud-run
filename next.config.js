@@ -109,6 +109,8 @@ const nextConfig = {
         '../../../packages/alignment/whisper': 'commonjs ../../../packages/alignment/whisper',
         '../../../packages/banner/generator': 'commonjs ../../../packages/banner/generator',
         '../../../packages/shared/ffmpeg': 'commonjs ../../../packages/shared/ffmpeg',
+        '@ffprobe-installer/ffprobe': 'commonjs @ffprobe-installer/ffprobe',
+        '@napi-rs/canvas': 'commonjs @napi-rs/canvas',
       });
     }
     

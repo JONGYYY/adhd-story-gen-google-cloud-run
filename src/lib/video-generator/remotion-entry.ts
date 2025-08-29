@@ -8,7 +8,6 @@ import type { VideoGenerationOptions } from './types';
 import AWS from 'aws-sdk';
 import { createCanvas, loadImage, Canvas } from '@napi-rs/canvas';
 import ffmpeg from 'fluent-ffmpeg';
-import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 
 // Use node-fetch to ensure Node Readable stream body
 async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<any> {
@@ -237,9 +236,10 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     const bgLocalPath = await resolveBackgroundLocalPath(category, videoId);
     await updateProgress(videoId, 40);
 
-    // Probe background dimensions
-    const { width: videoWidth, height: videoHeight } = await probeVideoDimensions(bgLocalPath);
-    console.log(`[${videoId}] 🎥 Background dimensions: ${videoWidth}x${videoHeight}`);
+    // Assume 9:16 background (user updated 1.mp4). Use 1080x1920 canvas for overlay.
+    const videoWidth = 1080;
+    const videoHeight = 1920;
+    console.log(`[${videoId}] 🎥 Using assumed background dimensions: ${videoWidth}x${videoHeight}`);
 
     // Prepare banners (download if present, otherwise fallback to local/public)
     const topBannerPath = await resolveBannerAsset('redditbannertop.png', videoId);
@@ -272,17 +272,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
   }
 } 
 
-async function probeVideoDimensions(filePath: string): Promise<{ width: number; height: number }> {
-  ffmpeg.setFfprobePath((ffprobeInstaller as any).path || ffprobeInstaller.path);
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(filePath, (err, data) => {
-      if (err) return reject(err);
-      const stream = data.streams.find((s: any) => s.width && s.height);
-      if (!stream) return resolve({ width: 1080, height: 1920 });
-      resolve({ width: stream.width, height: stream.height });
-    });
-  });
-}
+// No ffprobe: relying on user-provided 9:16 backgrounds
 
 async function resolveBannerAsset(filename: string, videoId: string): Promise<string | null> {
   const baseUrl = process.env.BACKGROUND_BASE_URL || '';
