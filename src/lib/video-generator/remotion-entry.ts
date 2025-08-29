@@ -301,41 +301,51 @@ async function resolveBannerAsset(filename: string, videoId: string): Promise<st
       }
     }
     if (bucket && region !== undefined) {
-      const assetsKey = [prefix ? prefix.replace(/\/?backgrounds\/?$/, '') : '', 'assets', filename]
-        .filter(Boolean)
-        .join('/');
+      const basePrefix = (prefix ? prefix.replace(/\/?backgrounds\/?$/, '') : '');
+      const tryKeys = [
+        [basePrefix, 'banners', filename].filter(Boolean).join('/'),
+        [basePrefix, 'assets', filename].filter(Boolean).join('/'),
+      ];
       const s3 = new AWS.S3({ region: region as string });
-      try {
-        // Try head first to confirm existence
-        await s3.headObject({ Bucket: bucket, Key: assetsKey }).promise();
-        const cacheDir = path.join(os.tmpdir(), 'banner_cache');
-        const localPath = path.join(cacheDir, filename);
-        try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
-        await new Promise<void>((resolve, reject) => {
-          const ws = createWriteStream(localPath);
-          s3.getObject({ Bucket: bucket, Key: assetsKey })
-            .createReadStream()
-            .on('error', reject)
-            .pipe(ws)
-            .on('finish', () => resolve())
-            .on('error', reject);
-        });
-        console.log(`[${videoId}] 🖼️ Downloaded banner asset from S3: ${assetsKey}`);
-        return localPath;
-      } catch {}
+      for (const key of tryKeys) {
+        try {
+          // Try head first to confirm existence
+          await s3.headObject({ Bucket: bucket, Key: key }).promise();
+          const cacheDir = path.join(os.tmpdir(), 'banner_cache');
+          const localPath = path.join(cacheDir, filename);
+          try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
+          await new Promise<void>((resolve, reject) => {
+            const ws = createWriteStream(localPath);
+            s3.getObject({ Bucket: bucket, Key: key })
+              .createReadStream()
+              .on('error', reject)
+              .pipe(ws)
+              .on('finish', () => resolve())
+              .on('error', reject);
+          });
+          console.log(`[${videoId}] 🖼️ Downloaded banner asset from S3: ${key}`);
+          return localPath;
+        } catch {}
+      }
     }
   }
   // HTTP fallback under assets/ at same root as BACKGROUND_BASE_URL
   if (/^https?:\/\//i.test(baseUrl)) {
     const root = baseUrl.replace(/\/?backgrounds\/?$/, '');
-    const url = `${root.replace(/\/$/, '')}/assets/${filename}`;
+    const base = root.replace(/\/$/, '');
+    const urls = [
+      `${base}/banners/${filename}`,
+      `${base}/assets/${filename}`,
+    ];
     const cacheDir = path.join(os.tmpdir(), 'banner_cache');
     const localPath = path.join(cacheDir, filename);
     try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
-    try {
-      await downloadToFile(url, localPath, videoId);
-      return localPath;
-    } catch {}
+    for (const url of urls) {
+      try {
+        await downloadToFile(url, localPath, videoId);
+        return localPath;
+      } catch {}
+    }
   }
   // Local public fallback
   const localPublic = path.join(process.cwd(), 'public', 'assets', filename);
