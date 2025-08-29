@@ -247,6 +247,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
 
     // Create overlay with banners + white title box
     const overlayPath = path.join(os.tmpdir(), `overlay_${videoId}.png`);
+    console.log(`[${videoId}] 🖼️ Creating banner overlay...`);
     await createBannerOverlay({
       videoWidth,
       videoHeight,
@@ -259,7 +260,9 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
 
     // Composite overlay onto background using ffmpeg
     const finalPath = path.join(os.tmpdir(), `output_${videoId}.mp4`);
-    await compositeOverlay(bgLocalPath, overlayPath, finalPath);
+    console.log(`[${videoId}] 🎬 Starting ffmpeg composite...`);
+    await updateProgress(videoId, 70);
+    await compositeOverlay(bgLocalPath, overlayPath, finalPath, videoId);
     await updateProgress(videoId, 100);
 
     const finalUrl = `/api/videos/${path.basename(finalPath)}`;
@@ -471,7 +474,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   await fs.writeFile(outputPath, png);
 }
 
-async function compositeOverlay(bgPath: string, overlayPath: string, outputPath: string): Promise<void> {
+async function compositeOverlay(bgPath: string, overlayPath: string, outputPath: string, videoId: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
@@ -494,11 +497,18 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
         '-map', '[vout]',
         '-map', '0:a?',
         '-c:v', 'libx264',
-        '-preset', 'veryfast',
+        '-preset', 'ultrafast',
         '-crf', '23',
+        '-c:a', 'copy',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart'
       ])
+      .on('start', (cmd) => {
+        console.log(`[${videoId}] ▶️ ffmpeg command: ${cmd}`);
+      })
+      .on('progress', async (p) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
       .on('error', reject)
       .on('end', () => resolve())
       .save(outputPath);
