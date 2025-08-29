@@ -6,7 +6,7 @@ import { updateProgress, setVideoFailed } from './status';
 import fetchOriginal from 'node-fetch';
 import type { VideoGenerationOptions } from './types';
 import AWS from 'aws-sdk';
-import { createCanvas, loadImage, Canvas } from '@napi-rs/canvas';
+import { createCanvas, loadImage, Canvas, GlobalFonts } from '@napi-rs/canvas';
 import ffmpeg from 'fluent-ffmpeg';
 
 // Use node-fetch to ensure Node Readable stream body
@@ -377,34 +377,21 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // Transparent background
   ctx.clearRect(0, 0, videoWidth, videoHeight);
 
-  // Draw top banner
-  if (topBannerPath) {
-    try {
-      const img = await loadImage(topBannerPath);
-      const scale = videoWidth / img.width;
-      const drawW = Math.round(img.width * scale);
-      const drawH = Math.round(img.height * scale);
-      ctx.drawImage(img as any, 0, 0, drawW, drawH);
-    } catch {}
-  }
-
-  // Draw bottom banner
-  if (bottomBannerPath) {
-    try {
-      const img = await loadImage(bottomBannerPath);
-      const scale = videoWidth / img.width;
-      const drawW = Math.round(img.width * scale);
-      const drawH = Math.round(img.height * scale);
-      ctx.drawImage(img as any, 0, videoHeight - drawH, drawW, drawH);
-    } catch {}
-  }
-
-  // Title box metrics
-  const sidePadding = Math.floor(videoWidth * 0.06);
-  const maxTextWidth = videoWidth - sidePadding * 2;
+  // Layout metrics to match screenshot
+  const cardWidthRatio = 0.86; // width of the white card (and banners) relative to video width
+  const cardWidth = Math.floor(videoWidth * cardWidthRatio);
+  const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
+  const maxTextWidth = cardWidth - Math.floor(videoWidth * 0.02) * 2;
   // Base font size relative to height; we'll adjust for wrapping
-  const baseFontSize = Math.floor(videoHeight * 0.05);
-  ctx.font = `${baseFontSize}px Arial`;
+  const baseFontSize = Math.floor(videoHeight * 0.055);
+
+  // Try to register Reddit-like font from S3/local, fallback to Arial
+  const fontPath = await resolveFontAsset('RedditSans-Bold.ttf');
+  if (fontPath) {
+    try { GlobalFonts.registerFromPath(fontPath, 'RedditSans'); } catch {}
+  }
+  const fontFamily = GlobalFonts.has('RedditSans') ? 'RedditSans' : 'Arial';
+  ctx.font = `bold ${baseFontSize}px ${fontFamily}`;
   ctx.fillStyle = 'black';
   ctx.textBaseline = 'top';
   
@@ -447,20 +434,39 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     lines.push(...newLines);
   }
 
-  const lineHeight = Math.floor(fontSize * 1.25);
+  const lineHeight = Math.floor(fontSize * 1.22);
   const textBlockHeight = lines.length * lineHeight;
-  const boxPaddingY = Math.floor(videoHeight * 0.015);
+  const boxPaddingY = Math.floor(videoHeight * 0.018);
   const boxHeight = textBlockHeight + boxPaddingY * 2;
-  const boxY = Math.max(0, Math.floor((videoHeight - boxHeight) / 2));
+  // Load banners to compute their scaled heights at card width
+  let topH = 0, botH = 0;
+  let topImg: any = null, botImg: any = null;
+  if (topBannerPath) {
+    try {
+      topImg = await loadImage(topBannerPath);
+      const scale = cardWidth / (topImg as any).width;
+      topH = Math.round((topImg as any).height * scale);
+    } catch {}
+  }
+  if (bottomBannerPath) {
+    try {
+      botImg = await loadImage(bottomBannerPath);
+      const scale = cardWidth / (botImg as any).width;
+      botH = Math.round((botImg as any).height * scale);
+    } catch {}
+  }
+  // Center the trio (top banner + box + bottom banner) vertically
+  const totalH = topH + boxHeight + botH;
+  const boxY = Math.max(0, Math.floor((videoHeight - totalH) / 2) + topH);
 
   // White box
   ctx.fillStyle = 'white';
   ctx.globalAlpha = 1;
-  ctx.fillRect(sidePadding, boxY, videoWidth - sidePadding * 2, boxHeight);
+  ctx.fillRect(sidePadding, boxY, cardWidth, boxHeight);
 
   // Draw text centered within box
   ctx.fillStyle = 'black';
-  ctx.font = `${fontSize}px Arial`;
+  ctx.font = `bold ${fontSize}px ${fontFamily}`;
   let y = boxY + boxPaddingY;
   for (const line of lines) {
     const m = ctx.measureText(line);
@@ -469,9 +475,92 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     y += lineHeight;
   }
 
+  // Draw top banner bottom-flush with the white box
+  if (topImg) {
+    const scale = cardWidth / (topImg as any).width;
+    const drawW = cardWidth;
+    const drawH = Math.round((topImg as any).height * scale);
+    ctx.drawImage(topImg as any, sidePadding, boxY - drawH, drawW, drawH);
+  }
+  // Draw bottom banner top-flush with the white box
+  if (botImg) {
+    const scale = cardWidth / (botImg as any).width;
+    const drawW = cardWidth;
+    const drawH = Math.round((botImg as any).height * scale);
+    ctx.drawImage(botImg as any, sidePadding, boxY + boxHeight, drawW, drawH);
+  }
+
   // Save overlay image
   const png = (canvas as any).toBuffer('image/png');
   await fs.writeFile(outputPath, png);
+}
+
+async function resolveFontAsset(filename: string): Promise<string | null> {
+  // Search S3 banners/fonts/, then assets/fonts/, then local public/fonts
+  const baseUrl = process.env.BACKGROUND_BASE_URL || '';
+  const s3Match = baseUrl.match(/^https?:\/\/(?:([^.]+)\.)?s3[.-]([a-z0-9-]+)\.amazonaws\.com\/?([^\s]*)$/i);
+  const envBucket = process.env.S3_BUCKET;
+  const envRegion = process.env.S3_REGION;
+  if (s3Match || (envBucket && envRegion)) {
+    const bucket = envBucket || (s3Match?.[1] || s3Match?.[3]?.split('/')[0]);
+    let prefix: string | undefined;
+    let region = envRegion || s3Match?.[2];
+    if (!envBucket && s3Match) {
+      if (!s3Match[1] && s3Match[3]) {
+        const parts = s3Match[3].split('/');
+        parts.shift();
+        prefix = parts.join('/');
+      } else {
+        prefix = s3Match[3];
+      }
+    } else {
+      try { const u = new URL(baseUrl); prefix = u.pathname.replace(/^\//, ''); } catch { prefix = ''; }
+    }
+    if (bucket && region !== undefined) {
+      const basePrefix = (prefix ? prefix.replace(/\/?backgrounds\/?$/, '') : '');
+      const tryKeys = [
+        [basePrefix, 'banners', 'fonts', filename].filter(Boolean).join('/'),
+        [basePrefix, 'assets', 'fonts', filename].filter(Boolean).join('/'),
+      ];
+      const s3 = new AWS.S3({ region: region as string });
+      for (const key of tryKeys) {
+        try {
+          await s3.headObject({ Bucket: bucket, Key: key }).promise();
+          const cacheDir = path.join(os.tmpdir(), 'font_cache');
+          const localPath = path.join(cacheDir, filename);
+          try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
+          await new Promise<void>((resolve, reject) => {
+            const ws = createWriteStream(localPath);
+            s3.getObject({ Bucket: bucket, Key: key })
+              .createReadStream()
+              .on('error', reject)
+              .pipe(ws)
+              .on('finish', () => resolve())
+              .on('error', reject);
+          });
+          return localPath;
+        } catch {}
+      }
+    }
+  }
+  // HTTP fallback
+  if (/^https?:\/\//i.test(baseUrl)) {
+    const root = baseUrl.replace(/\/?backgrounds\/?$/, '').replace(/\/$/, '');
+    const urls = [
+      `${root}/banners/fonts/${filename}`,
+      `${root}/assets/fonts/${filename}`,
+    ];
+    const cacheDir = path.join(os.tmpdir(), 'font_cache');
+    const localPath = path.join(cacheDir, filename);
+    try { await fs.mkdir(cacheDir, { recursive: true }); } catch {}
+    for (const url of urls) {
+      try { await downloadToFile(url, localPath, 'font'); return localPath; } catch {}
+    }
+  }
+  // Local public fallback
+  const localPublic = path.join(process.cwd(), 'public', 'fonts', filename);
+  try { await fs.access(localPublic); return localPublic; } catch {}
+  return null;
 }
 
 async function compositeOverlay(bgPath: string, overlayPath: string, outputPath: string, videoId: string): Promise<void> {
