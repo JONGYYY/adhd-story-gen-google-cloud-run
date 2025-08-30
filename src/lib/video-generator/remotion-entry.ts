@@ -464,7 +464,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
 
   const lineHeight = Math.floor(fontSize * 1.22);
   const textBlockHeight = lines.length * lineHeight;
-  const boxPaddingY = Math.floor(videoHeight * 0.018);
+  // Reduce white box vertical padding by ~15px overall (7-8px top/bottom)
+  const basePaddingY = Math.floor(videoHeight * 0.018);
+  const boxPaddingY = Math.max(0, basePaddingY - 8);
   const boxHeight = textBlockHeight + boxPaddingY * 2;
   // Load banners to compute their scaled heights at card width
   let topH = 0, botH = 0;
@@ -566,9 +568,10 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const refH = 376;
     const usernameXRatio = 388 / refW;
     const usernameYRatio = 130 / refH;
-    const ux = drawX + Math.round(drawW * usernameXRatio) + 5;
+    const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
     const uy = drawY + Math.round(drawH * usernameYRatio) + 10;
-    ctx.font = `600 ${Math.floor(fontSize * 1.5)}px ${authorFontFamily}`;
+    // Match author font size exactly to computed title size
+    ctx.font = `600 ${fontSize}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`u/${author}`, ux, uy);
