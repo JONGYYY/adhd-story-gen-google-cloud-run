@@ -384,7 +384,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const maxTextWidth = cardWidth - Math.floor(videoWidth * 0.02) * 2;
   // Base font size relative to height; we'll adjust for wrapping
   // Smaller base to match reference
-  const baseFontSize = Math.floor(videoHeight * 0.058);
+  const baseFontSize = Math.floor(videoHeight * 0.052);
 
   // Try to register Reddit-like font from S3/local, fallback to Arial
   // Prefer uploaded serif font; fallback to system DejaVuSerif-Bold; last resort Georgia/Times
@@ -449,7 +449,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // If still room, try increasing size until the longest line ~ 92% of card width
   let longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   // Grow until about 80% of available width for a more subtle size
-  while (longest < maxTextWidth * 0.80 && fontSize < Math.floor(videoHeight * 0.085)) {
+  while (longest < maxTextWidth * 0.70 && fontSize < Math.floor(videoHeight * 0.080)) {
     fontSize += 1;
     ctx.font = `bold ${fontSize}px ${fontFamily}`;
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
