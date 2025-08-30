@@ -467,6 +467,15 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
       botH = Math.round((botImg as any).height * scale);
     } catch {}
   }
+  // Fallback heights when banner assets are missing so layout/author still render
+  const FALLBACK_TOP_RATIO = 376 / 1858;
+  const FALLBACK_BOTTOM_RATIO = 234 / 1676;
+  if (!topImg) {
+    topH = Math.round(cardWidth * FALLBACK_TOP_RATIO);
+  }
+  if (!botImg) {
+    botH = Math.round(cardWidth * FALLBACK_BOTTOM_RATIO);
+  }
   // Center the trio (top banner + box + bottom banner) vertically
   const totalH = topH + boxHeight + botH;
   const boxY = Math.max(0, Math.floor((videoHeight - totalH) / 2) + topH);
@@ -481,36 +490,12 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
   let y = boxY + boxPaddingY;
   for (const line of lines) {
-    const x = sidePadding + innerPad + 10; // shift 10px to the right
+    const x = sidePadding + innerPad + 15; // shift 10px to the right
     ctx.fillText(line, x, y);
     y += lineHeight;
   }
 
-  // Draw author on top banner using ratios
-  if (topImg) {
-    const refW = 1858;
-    const refH = 376;
-    const usernameXRatio = 388 / refW;
-    const usernameYRatio = 130 / refH;
-    const scale = cardWidth / (topImg as any).width;
-    const drawH = Math.round((topImg as any).height * scale);
-    const ux = sidePadding + Math.round(cardWidth * usernameXRatio);
-    const uy = (boxY - drawH) + Math.round(drawH * usernameYRatio);
-    ctx.font = `600 16px ${authorFontFamily}`;
-    // Black text as requested, no shadow
-    ctx.fillStyle = 'black';
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(`u/${author}`, ux, uy);
-    // ensure no lingering shadow
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-  }
+  // Draw author on top banner using ratios (will be placed after banner draw)
 
   // Helpers to draw rounded images
   const drawRounded = (img: any, x: number, y: number, w: number, h: number, radii: {tl:number; tr:number; br:number; bl:number}) => {
@@ -532,12 +517,45 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     ctx.restore();
   };
   const cornerRadius = Math.floor(cardWidth * 0.03);
-  // Draw top banner bottom-flush with the white box, rounded top corners
-  if (topImg) {
-    const scale = cardWidth / (topImg as any).width;
+  // Draw top banner bottom-flush with the white box, rounded top corners (with fallback)
+  {
     const drawW = cardWidth;
-    const drawH = Math.round((topImg as any).height * scale);
-    drawRounded(topImg, sidePadding, boxY - drawH, drawW, drawH, { tl: cornerRadius, tr: cornerRadius, br: 0, bl: 0 });
+    const drawH = topH; // use computed top height (fallback if no image)
+    const drawX = sidePadding;
+    const drawY = boxY - drawH;
+    if (topImg) {
+      drawRounded(topImg, drawX, drawY, drawW, drawH, { tl: cornerRadius, tr: cornerRadius, br: 0, bl: 0 });
+    } else {
+      // Fallback: solid Reddit orange bar
+      ctx.save();
+      ctx.beginPath();
+      const r = { tl: cornerRadius, tr: cornerRadius, br: 0, bl: 0 };
+      ctx.moveTo(drawX + r.tl, drawY);
+      ctx.lineTo(drawX + drawW - r.tr, drawY);
+      ctx.quadraticCurveTo(drawX + drawW, drawY, drawX + drawW, drawY + r.tr);
+      ctx.lineTo(drawX + drawW, drawY + drawH - r.br);
+      ctx.quadraticCurveTo(drawX + drawW, drawY + drawH, drawX + drawW - r.br, drawY + drawH);
+      ctx.lineTo(drawX + r.bl, drawY + drawH);
+      ctx.quadraticCurveTo(drawX, drawY + drawH, drawX, drawY + drawH - r.bl);
+      ctx.lineTo(drawX, drawY + r.tl);
+      ctx.quadraticCurveTo(drawX, drawY, drawX + r.tl, drawY);
+      ctx.closePath();
+      ctx.fillStyle = '#FF4500';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Author text on top banner
+    const refW = 1858;
+    const refH = 376;
+    const usernameXRatio = 388 / refW;
+    const usernameYRatio = 130 / refH;
+    const ux = drawX + Math.round(drawW * usernameXRatio);
+    const uy = drawY + Math.round(drawH * usernameYRatio);
+    ctx.font = `600 16px ${authorFontFamily}`;
+    ctx.fillStyle = 'black';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`u/${author}`, ux, uy);
   }
   // Draw bottom banner top-flush with the white box, rounded bottom corners
   if (botImg) {
