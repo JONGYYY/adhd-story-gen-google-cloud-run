@@ -551,7 +551,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const usernameXRatio = 388 / refW;
     const usernameYRatio = 130 / refH;
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5;
-    const uy = drawY + Math.round(drawH * usernameYRatio);
+    const uy = drawY + Math.round(drawH * usernameYRatio) + 10;
     ctx.font = `600 ${fontSize}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
