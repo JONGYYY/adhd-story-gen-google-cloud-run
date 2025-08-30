@@ -378,24 +378,36 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   ctx.clearRect(0, 0, videoWidth, videoHeight);
 
   // Layout metrics to match screenshot
-  const cardWidthRatio = 0.86; // width of the white card (and banners) relative to video width
+  const cardWidthRatio = 0.88; // width of the white card (and banners) relative to video width
   const cardWidth = Math.floor(videoWidth * cardWidthRatio);
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const maxTextWidth = cardWidth - Math.floor(videoWidth * 0.02) * 2;
   // Base font size relative to height; we'll adjust for wrapping
-  const baseFontSize = Math.floor(videoHeight * 0.055);
+  const baseFontSize = Math.floor(videoHeight * 0.07);
 
   // Try to register Reddit-like font from S3/local, fallback to Arial
-  const fontPath = await resolveFontAsset('RedditSans-Bold.ttf');
-  if (fontPath) {
-    try { GlobalFonts.registerFromPath(fontPath, 'RedditSans'); } catch {}
+  // Prefer uploaded serif font; fallback to system DejaVuSerif-Bold; last resort Georgia/Times
+  const preferredFonts = [
+    'TitleSerif-Bold.ttf',
+    'Merriweather-Black.ttf',
+    'Merriweather-Bold.ttf',
+    'Georgia-Bold.ttf',
+    'TimesNewRoman-Bold.ttf',
+    'DejaVuSerif-Bold.ttf',
+  ];
+  let registered = false;
+  for (const f of preferredFonts) {
+    const p = await resolveFontAsset(f);
+    if (p) {
+      try { GlobalFonts.registerFromPath(p, 'TitleSerif'); registered = true; break; } catch {}
+    }
   }
-  const fontFamily = GlobalFonts.has('RedditSans') ? 'RedditSans' : 'Arial';
+  const fontFamily = registered ? 'TitleSerif' : 'Georgia';
   ctx.font = `bold ${baseFontSize}px ${fontFamily}`;
   ctx.fillStyle = 'black';
   ctx.textBaseline = 'top';
   
-  // Word wrap
+  // Word wrap with target 3 lines max, try to keep big size
   const words = title.split(/\s+/);
   const lines: string[] = [];
   let current = '';
@@ -412,10 +424,10 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   if (current) lines.push(current);
   // Adjust font size if too many lines
   let fontSize = baseFontSize;
-  const maxLines = 4;
+  const maxLines = 3;
   while (lines.length > maxLines && fontSize > Math.floor(baseFontSize * 0.7)) {
     fontSize -= 2;
-    ctx.font = `${fontSize}px Arial`;
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
     // recompute lines with smaller font
     const newLines: string[] = [];
     let cur = '';
@@ -432,6 +444,14 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     if (cur) newLines.push(cur);
     lines.length = 0;
     lines.push(...newLines);
+  }
+  // If still room, try increasing size until the longest line ~ 92% of card width
+  let longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+  while (longest < maxTextWidth * 0.92 && fontSize < Math.floor(videoHeight * 0.10)) {
+    fontSize += 1;
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+    if (longest > maxTextWidth) { fontSize -= 1; ctx.font = `bold ${fontSize}px ${fontFamily}`; break; }
   }
 
   const lineHeight = Math.floor(fontSize * 1.22);
@@ -475,19 +495,39 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     y += lineHeight;
   }
 
-  // Draw top banner bottom-flush with the white box
+  // Helpers to draw rounded images
+  const drawRounded = (img: any, x: number, y: number, w: number, h: number, radii: {tl:number; tr:number; br:number; bl:number}) => {
+    ctx.save();
+    ctx.beginPath();
+    const r = radii;
+    ctx.moveTo(x + r.tl, y);
+    ctx.lineTo(x + w - r.tr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+    ctx.lineTo(x + w, y + h - r.br);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+    ctx.lineTo(x + r.bl, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+    ctx.lineTo(x, y + r.tl);
+    ctx.quadraticCurveTo(x, y, x + r.tl, y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(img as any, x, y, w, h);
+    ctx.restore();
+  };
+  const cornerRadius = Math.floor(cardWidth * 0.03);
+  // Draw top banner bottom-flush with the white box, rounded top corners
   if (topImg) {
     const scale = cardWidth / (topImg as any).width;
     const drawW = cardWidth;
     const drawH = Math.round((topImg as any).height * scale);
-    ctx.drawImage(topImg as any, sidePadding, boxY - drawH, drawW, drawH);
+    drawRounded(topImg, sidePadding, boxY - drawH, drawW, drawH, { tl: cornerRadius, tr: cornerRadius, br: 0, bl: 0 });
   }
-  // Draw bottom banner top-flush with the white box
+  // Draw bottom banner top-flush with the white box, rounded bottom corners
   if (botImg) {
     const scale = cardWidth / (botImg as any).width;
     const drawW = cardWidth;
     const drawH = Math.round((botImg as any).height * scale);
-    ctx.drawImage(botImg as any, sidePadding, boxY + boxHeight, drawW, drawH);
+    drawRounded(botImg, sidePadding, boxY + boxHeight, drawW, drawH, { tl: 0, tr: 0, br: cornerRadius, bl: cornerRadius });
   }
 
   // Save overlay image
@@ -560,6 +600,9 @@ async function resolveFontAsset(filename: string): Promise<string | null> {
   // Local public fallback
   const localPublic = path.join(process.cwd(), 'public', 'fonts', filename);
   try { await fs.access(localPublic); return localPublic; } catch {}
+  // System fallback to DejaVu Serif Bold (Debian-based)
+  const systemDeja = '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf';
+  try { await fs.access(systemDeja); return systemDeja; } catch {}
   return null;
 }
 
