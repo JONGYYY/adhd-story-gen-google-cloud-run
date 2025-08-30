@@ -382,11 +382,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const cardWidth = Math.floor(videoWidth * cardWidthRatio);
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const maxTextWidth = cardWidth - Math.floor(videoWidth * 0.02) * 2;
-  // Base font size relative to height; we'll adjust for wrapping
-  // Smaller base to match reference
-  // Smaller base and explicit hard cap to ensure consistent sizing
-  const baseFontSize = Math.floor(videoHeight * 0.034); // ~65px @ 1080x1920
-  const maxFontPx = Math.floor(videoHeight * 0.037);    // hard cap ~71px
+  // Base size derived from card width for stable ratio + hard cap
+  const baseFontSize = Math.floor(cardWidth * 0.056);
+  const maxFontPx = Math.floor(cardWidth * 0.060);
 
   // Try to register Reddit-like font from S3/local, fallback to Arial
   // Prefer uploaded serif font; fallback to system DejaVuSerif-Bold; last resort Georgia/Times
@@ -425,13 +423,11 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     }
   }
   if (current) lines.push(current);
-  // Adjust font size if too many lines
+  // Shrink-to-fit loop with target fill ratio and line cap
   let fontSize = baseFontSize;
   const maxLines = 3;
-  while (lines.length > maxLines && fontSize > Math.floor(baseFontSize * 0.7)) {
-    fontSize -= 2;
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
-    // recompute lines with smaller font
+  const targetFill = 0.60; // longest line <= 60% of available width
+  const recomputeWrapped = () => {
     const newLines: string[] = [];
     let cur = '';
     for (const w of words) {
@@ -445,22 +441,15 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
       }
     }
     if (cur) newLines.push(cur);
-    lines.length = 0;
-    lines.push(...newLines);
-  }
-  // If still room, try increasing size until the longest line ~ 92% of card width
+    return newLines;
+  };
   let longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
-  // Grow until about 80% of available width for a more subtle size
-  while (longest < maxTextWidth * 0.65 && fontSize < maxFontPx) {
-    fontSize += 1;
+  while ((lines.length > maxLines || longest > maxTextWidth * targetFill || fontSize > maxFontPx) && fontSize > Math.max(18, Math.floor(baseFontSize * 0.6))) {
+    fontSize -= 1;
     ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    const newLines = recomputeWrapped();
+    lines.length = 0; lines.push(...newLines);
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
-    if (longest > maxTextWidth) { fontSize -= 1; ctx.font = `bold ${fontSize}px ${fontFamily}`; break; }
-  }
-  // Enforce cap in case lines are short
-  if (fontSize > maxFontPx) {
-    fontSize = maxFontPx;
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
   }
 
   const lineHeight = Math.floor(fontSize * 1.22);
