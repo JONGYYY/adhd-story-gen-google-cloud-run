@@ -385,7 +385,8 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const cardWidthRatio = 0.88; // width of the white card (and banners) relative to video width
   const cardWidth = Math.floor(videoWidth * cardWidthRatio);
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
-  const maxTextWidth = cardWidth - Math.floor(videoWidth * 0.02) * 2;
+  const innerPad = Math.floor(videoWidth * 0.02);
+  const maxTextWidth = cardWidth - innerPad * 2;
   // Base size derived from card width for stable ratio + hard cap
   const baseFontSize = Math.floor(cardWidth * 0.056);
   const maxFontPx = Math.floor(cardWidth * 0.060);
@@ -475,13 +476,12 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   ctx.globalAlpha = 1;
   ctx.fillRect(sidePadding, boxY, cardWidth, boxHeight);
 
-  // Draw text centered within box
+  // Draw title left-aligned within the card
   ctx.fillStyle = 'black';
   ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
   let y = boxY + boxPaddingY;
   for (const line of lines) {
-    const m = ctx.measureText(line);
-    const x = Math.floor((videoWidth - m.width) / 2);
+    const x = sidePadding + innerPad;
     ctx.fillText(line, x, y);
     y += lineHeight;
   }
@@ -497,9 +497,19 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const ux = sidePadding + Math.round(cardWidth * usernameXRatio);
     const uy = (boxY - drawH) + Math.round(drawH * usernameYRatio);
     ctx.font = `600 16px ${authorFontFamily}`;
-    ctx.fillStyle = 'black';
+    // Use white font with subtle dark shadow for visibility on orange banner
+    ctx.fillStyle = 'white';
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`u/${author}`, ux, uy);
+    // reset shadow
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
   }
 
   // Helpers to draw rounded images
