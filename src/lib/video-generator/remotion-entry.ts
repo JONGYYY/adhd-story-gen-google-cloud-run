@@ -388,8 +388,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
   // Base size derived from card width for stable ratio + hard cap
-  const baseFontSize = Math.floor(cardWidth * 0.056);
-  const maxFontPx = Math.floor(cardWidth * 0.060);
+  // Scale base sizes by 1.5x to enlarge typography
+  const baseFontSize = Math.floor(cardWidth * 0.056 * 1.5);
+  const maxFontPx = Math.floor(cardWidth * 0.060 * 1.5);
 
   // Register Inter fonts if available
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -446,21 +447,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   }
 
-  // Scale title font up by 1.5x, then shrink-to-fit again if needed
-  fontSize = Math.floor(fontSize * 1.5);
-  ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
-  {
-    const newLines = recomputeWrapped();
-    lines.length = 0; lines.push(...newLines);
-    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
-  }
-  while ((lines.length > maxLines || longest > maxTextWidth * targetFill) && fontSize > Math.max(18, Math.floor(baseFontSize * 0.6))) {
-    fontSize -= 1;
-    ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
-    const newLines = recomputeWrapped();
-    lines.length = 0; lines.push(...newLines);
-    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
-  }
+  // No post-fit scaling; base and max have already been increased by 1.5x
 
   const lineHeight = Math.floor(fontSize * 1.22);
   const textBlockHeight = lines.length * lineHeight;
