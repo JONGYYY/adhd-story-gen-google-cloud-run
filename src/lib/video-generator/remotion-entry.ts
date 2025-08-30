@@ -447,7 +447,21 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   }
 
-  // No post-fit scaling; base and max have already been increased by 1.5x
+  // Post-fit upscale by 1.3x, then shrink-to-fit again if needed
+  fontSize = Math.floor(fontSize * 1.3);
+  ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
+  {
+    const newLines = recomputeWrapped();
+    lines.length = 0; lines.push(...newLines);
+    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+  }
+  while ((lines.length > maxLines || longest > maxTextWidth * targetFill) && fontSize > Math.max(18, Math.floor(baseFontSize * 0.6))) {
+    fontSize -= 1;
+    ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
+    const newLines = recomputeWrapped();
+    lines.length = 0; lines.push(...newLines);
+    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+  }
 
   const lineHeight = Math.floor(fontSize * 1.22);
   const textBlockHeight = lines.length * lineHeight;
@@ -556,7 +570,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const usernameXRatio = 388 / refW;
     const usernameYRatio = 130 / refH;
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
-    const uy = drawY + Math.round(drawH * usernameYRatio) + 10;
+    const uy = drawY + Math.round(drawH * usernameYRatio) + 20; // lower by additional 10px
     // Match author font size exactly to computed title size
     ctx.font = `600 ${fontSize}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
