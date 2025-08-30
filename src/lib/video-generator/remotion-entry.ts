@@ -227,7 +227,8 @@ async function resolveBackgroundLocalPath(category: string, videoId: string): Pr
 export async function generateVideoWithRemotion(options: VideoGenerationOptions, videoId: string): Promise<string> {
   const category = options.background?.category || 'minecraft';
   const title = (options as any)?.story?.title || 'Your Title Here';
-  const author = (options as any)?.story?.author || 'Anonymous';
+  // Prefer logged-in/account username; fallback to story author, then Anonymous
+  const author = (options as any)?.user?.username || (options as any)?.author || (options as any)?.story?.author || process.env.DEFAULT_AUTHOR_USERNAME || 'Anonymous';
 
   try {
     console.log(`[${videoId}] ▶️ Remotion entry starting for category=${category}`);
