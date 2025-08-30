@@ -481,7 +481,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
   let y = boxY + boxPaddingY;
   for (const line of lines) {
-    const x = sidePadding + innerPad;
+    const x = sidePadding + innerPad + 10; // shift 10px to the right
     ctx.fillText(line, x, y);
     y += lineHeight;
   }
@@ -497,15 +497,15 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const ux = sidePadding + Math.round(cardWidth * usernameXRatio);
     const uy = (boxY - drawH) + Math.round(drawH * usernameYRatio);
     ctx.font = `600 16px ${authorFontFamily}`;
-    // Use white font with subtle dark shadow for visibility on orange banner
-    ctx.fillStyle = 'white';
-    ctx.shadowColor = 'rgba(0,0,0,0.35)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
+    // Black text as requested, no shadow
+    ctx.fillStyle = 'black';
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`u/${author}`, ux, uy);
-    // reset shadow
+    // ensure no lingering shadow
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
