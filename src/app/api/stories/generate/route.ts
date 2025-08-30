@@ -1,68 +1,45 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { generateStory } from '@/utils/openai';
-import { StoryCategory } from '@/utils/reddit';
-
-type StoryLength = 'short' | 'medium' | 'long';
-type TargetLength = Record<StoryLength, number>;
+import { generateStructuredStory, splitStoryIntoBeats } from '@/lib/story-generator';
+import { generateTTSAndAlignment } from '@/lib/video-generator/shared/audio';
+import { v4 as uuidv4 } from 'uuid';
 
 interface StoryRequest {
-  prompt: string;
-  length?: StoryLength;
-  style?: string;
+  subreddit: string; // e.g., r/aita
+  isCliffhanger?: boolean;
+  narratorGender?: 'male' | 'female';
+  voice?: { provider?: 'elevenlabs' | 'edge'; voiceId?: string; gender?: 'male' | 'female' };
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, length = 'medium', style = 'casual' } = (await request.json()) as StoryRequest;
-
-    if (!prompt) {
-      return NextResponse.json(
-        { error: 'Missing prompt' },
-        { status: 400 }
-      );
+    const { subreddit, isCliffhanger = false, narratorGender = 'male', voice } = (await request.json()) as StoryRequest;
+    if (!subreddit) {
+      return NextResponse.json({ error: 'Missing subreddit' }, { status: 400 });
     }
 
-    // TODO: Implement actual story generation with OpenAI
-    // This is a mock response
-    const story = {
-      id: Math.random().toString(36).substr(2, 9),
-      prompt,
-      content: 'Generated story content would go here...',
-      metadata: {
-        length,
-      style,
-        wordCount: 500,
-        readingTime: '2 min',
-        generated: new Date().toISOString()
-      }
-    };
+    // 1) Generate story using prompt templates
+    const story = await generateStructuredStory({ subreddit, isCliffhanger, narratorGender });
 
-    // Calculate rough engagement prediction based on story characteristics
-    const wordCount = story.content.split(/\s+/).length;
-    const targetLength: TargetLength = {
-      short: 400,
-      medium: 650,
-      long: 1000
-    };
+    // 2) Split into beats using [BREAK] or paragraphs
+    const { beats } = splitStoryIntoBeats(story.content);
 
-    // Simple engagement prediction based on length optimization
-    const lengthScore = 1 - Math.abs(wordCount - targetLength[length]) / targetLength[length];
-    const engagementPrediction = Math.min(0.95, Math.max(0.7, lengthScore));
+    // 3) Generate TTS for story (full), obtain duration and alignment path
+    const jobId = uuidv4();
+    const tts = await generateTTSAndAlignment(story.content, {
+      provider: (voice?.provider || 'elevenlabs') as any,
+      voiceId: voice?.voiceId || 'adam',
+    } as any, jobId);
 
     return NextResponse.json({
-      ...story,
-      predictions: {
-        engagement: engagementPrediction,
-        estimatedViews: Math.floor(engagementPrediction * 10000),
-        viralPotential: engagementPrediction > 0.85 ? 'high' : 'medium'
-      }
+      title: story.title,
+      content: story.content,
+      metadata: story.metadata,
+      beats,
+      audio: { duration: tts.duration },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating story:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate story' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || 'Failed to generate story' }, { status: 500 });
   }
-} 
+}
