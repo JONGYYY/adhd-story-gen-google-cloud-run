@@ -446,7 +446,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   }
 
-  // Increase final title size by 1.5x, then shrink-to-fit again if needed
+  // Scale title font up by 1.5x, then shrink-to-fit again if needed
   fontSize = Math.floor(fontSize * 1.5);
   ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
   {
@@ -567,7 +567,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const usernameXRatio = 388 / refW;
     const usernameYRatio = 130 / refH;
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5;
-    const uy = drawY + Math.round(drawH * usernameYRatio) + 25;
+    const uy = drawY + Math.round(drawH * usernameYRatio) + 10;
     ctx.font = `600 ${Math.floor(fontSize * 1.5)}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
