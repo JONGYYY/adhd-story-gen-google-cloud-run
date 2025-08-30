@@ -227,6 +227,7 @@ async function resolveBackgroundLocalPath(category: string, videoId: string): Pr
 export async function generateVideoWithRemotion(options: VideoGenerationOptions, videoId: string): Promise<string> {
   const category = options.background?.category || 'minecraft';
   const title = (options as any)?.story?.title || 'Your Title Here';
+  const author = (options as any)?.story?.author || 'Anonymous';
 
   try {
     console.log(`[${videoId}] ▶️ Remotion entry starting for category=${category}`);
@@ -252,6 +253,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       videoWidth,
       videoHeight,
       title,
+      author,
       topBannerPath,
       bottomBannerPath,
       outputPath: overlayPath,
@@ -364,13 +366,14 @@ type OverlayParams = {
   videoWidth: number;
   videoHeight: number;
   title: string;
+  author: string;
   topBannerPath: string | null;
   bottomBannerPath: string | null;
   outputPath: string;
 };
 
 async function createBannerOverlay(params: OverlayParams): Promise<void> {
-  const { videoWidth, videoHeight, title, topBannerPath, bottomBannerPath, outputPath } = params;
+  const { videoWidth, videoHeight, title, author, topBannerPath, bottomBannerPath, outputPath } = params;
   const canvas: Canvas = createCanvas(videoWidth, videoHeight);
   const ctx = canvas.getContext('2d');
 
@@ -386,25 +389,14 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const baseFontSize = Math.floor(cardWidth * 0.056);
   const maxFontPx = Math.floor(cardWidth * 0.060);
 
-  // Try to register Reddit-like font from S3/local, fallback to Arial
-  // Prefer uploaded serif font; fallback to system DejaVuSerif-Bold; last resort Georgia/Times
-  const preferredFonts = [
-    'TitleSerif-Bold.ttf',
-    'Merriweather-Black.ttf',
-    'Merriweather-Bold.ttf',
-    'Georgia-Bold.ttf',
-    'TimesNewRoman-Bold.ttf',
-    'DejaVuSerif-Bold.ttf',
-  ];
-  let registered = false;
-  for (const f of preferredFonts) {
-    const p = await resolveFontAsset(f);
-    if (p) {
-      try { GlobalFonts.registerFromPath(p, 'TitleSerif'); registered = true; break; } catch {}
-    }
-  }
-  const fontFamily = registered ? 'TitleSerif' : 'Georgia';
-  ctx.font = `bold ${baseFontSize}px ${fontFamily}`;
+  // Register Inter fonts if available
+  const interBold = await resolveFontAsset('Inter-Bold.ttf');
+  const interSemiBold = await resolveFontAsset('Inter-SemiBold.ttf');
+  if (interBold) { try { GlobalFonts.registerFromPath(interBold, 'InterBold'); } catch {} }
+  if (interSemiBold) { try { GlobalFonts.registerFromPath(interSemiBold, 'InterSemiBold'); } catch {} }
+  const titleFontFamily = GlobalFonts.has('InterBold') ? 'InterBold' : 'Arial';
+  const authorFontFamily = GlobalFonts.has('InterSemiBold') ? 'InterSemiBold' : 'Arial';
+  ctx.font = `bold ${baseFontSize}px ${titleFontFamily}`;
   ctx.fillStyle = 'black';
   ctx.textBaseline = 'top';
   
@@ -446,7 +438,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   let longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   while ((lines.length > maxLines || longest > maxTextWidth * targetFill || fontSize > maxFontPx) && fontSize > Math.max(18, Math.floor(baseFontSize * 0.6))) {
     fontSize -= 1;
-    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
     const newLines = recomputeWrapped();
     lines.length = 0; lines.push(...newLines);
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
@@ -484,13 +476,29 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
 
   // Draw text centered within box
   ctx.fillStyle = 'black';
-  ctx.font = `bold ${fontSize}px ${fontFamily}`;
+  ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
   let y = boxY + boxPaddingY;
   for (const line of lines) {
     const m = ctx.measureText(line);
     const x = Math.floor((videoWidth - m.width) / 2);
     ctx.fillText(line, x, y);
     y += lineHeight;
+  }
+
+  // Draw author on top banner using ratios
+  if (topImg) {
+    const refW = 1858;
+    const refH = 376;
+    const usernameXRatio = 388 / refW;
+    const usernameYRatio = 130 / refH;
+    const scale = cardWidth / (topImg as any).width;
+    const drawH = Math.round((topImg as any).height * scale);
+    const ux = sidePadding + Math.round(cardWidth * usernameXRatio);
+    const uy = (boxY - drawH) + Math.round(drawH * usernameYRatio);
+    ctx.font = `600 16px ${authorFontFamily}`;
+    ctx.fillStyle = 'black';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`u/${author}`, ux, uy);
   }
 
   // Helpers to draw rounded images
