@@ -303,9 +303,10 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     });
     await updateProgress(videoId, 60);
 
-    // Build center one-word captions starting right after the title finishes
+    // Build center one-word captions (remove [BREAK]) starting right after the title finishes
     const subsPath = path.join(os.tmpdir(), `captions_${videoId}.ass`);
-    await buildCenterWordAss(fullStory || title, storyAudioPath, subsPath, titleDuration + 0.05);
+    const captionText = (fullStory || title).replace(/\[BREAK\]/g, ' ');
+    await buildCenterWordAss(captionText, storyAudioPath, subsPath, Math.max(0, titleDuration + 0.10));
 
     // Composite with audio, overlay only during title audio, then remove for captions area
     const finalPath = path.join(os.tmpdir(), `output_${videoId}.mp4`);
@@ -781,7 +782,8 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
   try { total = await getAudioDurationSeconds(audioPath); } catch { total = Math.max(3, words.length * 0.35); }
   const per = Math.max(0.18, total / Math.max(1, words.length));
 
-  const header = `[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,84,&H00FFFFFF,&H000000FF,&H00101010,&H00000000,-1,0,0,0,100,100,0,0,3,4,0,2,10,10,40,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+  // alignment=2 => centered; remove background box by using transparent BackColour and BorderStyle 1
+  const header = `[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,84,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,10,10,40,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
   const toTime = (s: number) => {
     const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = Math.floor(s % 60); const cs = Math.floor((s % 1) * 100);
     return `${String(h).padStart(1,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
@@ -790,7 +792,7 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
   for (const w of words) {
     const start = toTime(t);
     const end = toTime(t + per);
-    lines += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\bord5} ${w}\n`;
+    lines += `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\bord4} ${w}\n`;
     t += per;
   }
   await fs.writeFile(outAssPath, header + lines);
@@ -814,7 +816,8 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
         // split overlay stream to add fadeout
         { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
-        { filter: 'fade', options: `t=out:st=${Math.max(0.1, titleDuration - 0.1)}:d=0.3:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
+        // fade overlay to 0 right before captions start
+        { filter: 'fade', options: `t=out:st=${Math.max(0.1, titleDuration - 0.12)}:d=0.25:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
         { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'olfade'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
