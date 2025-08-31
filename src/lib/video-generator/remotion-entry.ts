@@ -775,7 +775,7 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
         // split overlay stream to add fadeout
         { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
-        { filter: 'fade', options: `t=out:st=${titleDuration - 0.1}:d=0.1:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
+        { filter: 'fade', options: `t=out:st=${Math.max(0.1, titleDuration - 0.1)}:d=0.3:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
         { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'olfade'], outputs: 'vout' },
         // concat title and story audio
         { filter: 'anull', inputs: '2:a', outputs: 'a0' },
@@ -791,7 +791,8 @@ async function compositeWithAudioAndTimedOverlay(
         '-c:a', 'aac',
         '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart'
+        '-movflags', '+faststart',
+        '-shortest'
       ])
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
