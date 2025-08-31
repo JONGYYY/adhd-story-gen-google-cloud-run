@@ -250,15 +250,44 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     const topBannerPath = await resolveBannerAsset('redditbannertop.png', videoId);
     const bottomBannerPath = await resolveBannerAsset('redditbannerbottom.png', videoId);
 
-    // TTS for title + story using ElevenLabs util in Node (saves buffers)
+    // TTS for title + story using ElevenLabs util with timeout and silent fallback to avoid hangs
+    const makeSilentWav = (seconds: number): Buffer => {
+      const sampleRate = 22050; const channels = 1; const bits = 16;
+      const bytesPerSample = bits/8; const blockAlign = channels*bytesPerSample;
+      const byteRate = sampleRate*blockAlign; const dataSize = Math.floor(seconds*sampleRate)*blockAlign;
+      const fileSize = 36+dataSize; const buf = Buffer.alloc(44+dataSize);
+      let o=0; buf.write('RIFF',o); o+=4; buf.writeUInt32LE(fileSize,o); o+=4; buf.write('WAVE',o); o+=4;
+      buf.write('fmt ',o); o+=4; buf.writeUInt32LE(16,o); o+=4; buf.writeUInt16LE(1,o); o+=2; buf.writeUInt16LE(channels,o); o+=2;
+      buf.writeUInt32LE(sampleRate,o); o+=4; buf.writeUInt32LE(byteRate,o); o+=4; buf.writeUInt16LE(blockAlign,o); o+=2; buf.writeUInt16LE(bits,o); o+=2;
+      buf.write('data',o); o+=4; buf.writeUInt32LE(dataSize,o); o+=4; buf.fill(0,o);
+      return buf;
+    };
+    const withTimeout = async (p: Promise<ArrayBuffer>, ms: number) => {
+      return await Promise.race([
+        p,
+        new Promise<ArrayBuffer>((_res, rej) => setTimeout(() => rej(new Error('tts-timeout')), ms))
+      ]);
+    };
     const voice = (options as any)?.voice || { id: 'adam', gender: 'male' };
-    const titleBuf = await generateSpeech({ text: title, voice });
-    const storyBuf = await generateSpeech({ text: fullStory || title, voice });
-    const titleAudioPath = path.join(os.tmpdir(), `${videoId}_title.mp3`);
-    const storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.mp3`);
-    await fs.writeFile(titleAudioPath, Buffer.from(titleBuf));
-    await fs.writeFile(storyAudioPath, Buffer.from(storyBuf));
-    const titleDuration = Math.max(1.2, Math.min(6, title.length * 0.06));
+    let titleAudioPath = path.join(os.tmpdir(), `${videoId}_title.wav`);
+    let storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.wav`);
+    let titleDuration = Math.max(1.2, Math.min(6, title.length * 0.06));
+    try {
+      const titleBuf = await withTimeout(generateSpeech({ text: title, voice }), 20000) as ArrayBuffer;
+      const storyBuf = await withTimeout(generateSpeech({ text: fullStory || title, voice }), 30000) as ArrayBuffer;
+      titleAudioPath = path.join(os.tmpdir(), `${videoId}_title.mp3`);
+      storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.mp3`);
+      await fs.writeFile(titleAudioPath, Buffer.from(titleBuf));
+      await fs.writeFile(storyAudioPath, Buffer.from(storyBuf));
+    } catch (e) {
+      console.warn(`[${videoId}] ⚠️ TTS failed or timed out, using silent WAV fallback:`, (e as any)?.message || e);
+      const silentTitle = makeSilentWav(titleDuration);
+      const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
+      const silentStory = makeSilentWav(estStory);
+      await fs.writeFile(titleAudioPath, silentTitle);
+      await fs.writeFile(storyAudioPath, silentStory);
+    }
+    try { await updateProgress(videoId, 45); } catch {}
 
     // Create overlay with banners + white title box
     const overlayPath = path.join(os.tmpdir(), `overlay_${videoId}.png`);
