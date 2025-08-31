@@ -287,6 +287,12 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       await fs.writeFile(titleAudioPath, silentTitle);
       await fs.writeFile(storyAudioPath, silentStory);
     }
+    // Measure actual durations
+    let measuredTitle = 0; let measuredStory = 0;
+    try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
+    try { measuredStory = await getAudioDurationSeconds(storyAudioPath); } catch {}
+    if (measuredTitle > 0) titleDuration = measuredTitle;
+    const totalDuration = Math.max(2, titleDuration + (measuredStory > 0 ? measuredStory : 0) + 1);
     try { await updateProgress(videoId, 45); } catch {}
 
     // Create overlay with banners + white title box
@@ -319,6 +325,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       titleAudioPath: titleAudioPath,
       storyAudioPath: storyAudioPath,
       titleDuration: Math.max(0.1, titleDuration),
+      totalDuration,
       subsPath,
     }, videoId);
     await updateProgress(videoId, 100);
@@ -782,8 +789,8 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
   try { total = await getAudioDurationSeconds(audioPath); } catch { total = Math.max(3, words.length * 0.35); }
   const per = Math.max(0.18, total / Math.max(1, words.length));
 
-  // alignment=2 => centered; remove background box by using transparent BackColour and BorderStyle 1
-  const header = `[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,84,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,10,10,40,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+  // alignment=2 => center; MarginV positions vertically. Use ~960/2 to center baseline closely.
+  const header = `[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,88,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,10,10,960,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
   const toTime = (s: number) => {
     const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = Math.floor(s % 60); const cs = Math.floor((s % 1) * 100);
     return `${String(h).padStart(1,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
@@ -800,10 +807,10 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
 
 // New: composite background with timed overlay and concatenated title+story audio
 async function compositeWithAudioAndTimedOverlay(
-  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; subsPath: string },
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string },
   videoId: string
 ): Promise<void> {
-  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, subsPath } = params;
+  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
@@ -836,7 +843,7 @@ async function compositeWithAudioAndTimedOverlay(
         '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
-        '-shortest'
+        `-t`, `${Math.max(1, totalDuration)}`
       ])
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
