@@ -258,7 +258,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     const storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.mp3`);
     await fs.writeFile(titleAudioPath, Buffer.from(titleBuf));
     await fs.writeFile(storyAudioPath, Buffer.from(storyBuf));
-    const titleDuration = 2; // approximate; banner fade uses quick default
+    const titleDuration = Math.max(1.2, Math.min(6, title.length * 0.06));
 
     // Create overlay with banners + white title box
     const overlayPath = path.join(os.tmpdir(), `overlay_${videoId}.png`);
@@ -301,6 +301,11 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
 // No ffprobe: relying on user-provided 9:16 backgrounds
 
 async function resolveBannerAsset(filename: string, videoId: string): Promise<string | null> {
+  if ((process.env.SKIP_REMOTE_BANNERS || '0') === '1') {
+    const localPublic = path.join(process.cwd(), 'public', 'assets', filename);
+    try { await fs.access(localPublic); return localPublic; } catch {}
+    return null;
+  }
   const baseUrl = process.env.BACKGROUND_BASE_URL || '';
   // Prefer S3 via AWS SDK when BACKGROUND_BASE_URL points to S3
   const s3Match = baseUrl.match(/^https?:\/\/(?:([^.]+)\.)?s3[.-]([a-z0-9-]+)\.amazonaws\.com\/?([^\s]*)$/i);
@@ -611,6 +616,10 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
 }
 
 async function resolveFontAsset(filename: string): Promise<string | null> {
+  if ((process.env.SKIP_REMOTE_BANNERS || '0') === '1') {
+    const localPublic = path.join(process.cwd(), 'public', 'fonts', filename);
+    try { await fs.access(localPublic); return localPublic; } catch {}
+  }
   // Search S3 banners/fonts/, then assets/fonts/, then local public/fonts
   const baseUrl = process.env.BACKGROUND_BASE_URL || '';
   const s3Match = baseUrl.match(/^https?:\/\/(?:([^.]+)\.)?s3[.-]([a-z0-9-]+)\.amazonaws\.com\/?([^\s]*)$/i);
@@ -686,17 +695,25 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
     ffmpeg()
       .input(bgPath)
       .input(overlayPath)
+      .input(titleAudioPath)
+      .input(storyAudioPath)
       .complexFilter([
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
-        { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'ol'], outputs: 'vout' }
+        { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
+        { filter: 'fade', options: `t=out:st=${titleDuration - 0.1}:d=0.1:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
+        { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'olfade'], outputs: 'vout' },
+        { filter: 'anull', inputs: '2:a', outputs: 'a0' },
+        { filter: 'anull', inputs: '3:a', outputs: 'a1' },
+        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0', 'a1'], outputs: 'aout' }
       ])
       .outputOptions([
         '-map', '[vout]',
-        '-map', '0:a?',
+        '-map', '[aout]',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
-        '-c:a', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart'
       ])
