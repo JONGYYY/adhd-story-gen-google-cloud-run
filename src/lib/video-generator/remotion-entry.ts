@@ -8,6 +8,8 @@ import type { VideoGenerationOptions } from './types';
 import AWS from 'aws-sdk';
 import { createCanvas, loadImage, Canvas, GlobalFonts } from '@napi-rs/canvas';
 import ffmpeg from 'fluent-ffmpeg';
+import { generateTitleAndStoryAudio } from './shared/audio';
+import type { WordAlignment } from './engines/types';
 
 // Use node-fetch to ensure Node Readable stream body
 async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<any> {
@@ -227,6 +229,7 @@ async function resolveBackgroundLocalPath(category: string, videoId: string): Pr
 export async function generateVideoWithRemotion(options: VideoGenerationOptions, videoId: string): Promise<string> {
   const category = options.background?.category || 'minecraft';
   const title = (options as any)?.story?.title || 'Your Title Here';
+  const fullStory = (options as any)?.story?.story || (options as any)?.story?.content || '';
   // Prefer logged-in/account username; fallback to story author, then Anonymous
   const author = (options as any)?.user?.username || (options as any)?.author || (options as any)?.story?.author || process.env.DEFAULT_AUTHOR_USERNAME || 'Anonymous';
 
@@ -247,6 +250,16 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     const topBannerPath = await resolveBannerAsset('redditbannertop.png', videoId);
     const bottomBannerPath = await resolveBannerAsset('redditbannerbottom.png', videoId);
 
+    // TTS for title + story
+    const voiceProvider = (options as any)?.voice?.provider || 'elevenlabs';
+    const voiceId = (options as any)?.voice?.voiceId || 'adam';
+    const { titleAudio, storyAudio } = await generateTitleAndStoryAudio(
+      title,
+      fullStory || title,
+      { provider: voiceProvider, voiceId } as any,
+      `${videoId}_tts`
+    );
+
     // Create overlay with banners + white title box
     const overlayPath = path.join(os.tmpdir(), `overlay_${videoId}.png`);
     console.log(`[${videoId}] 🖼️ Creating banner overlay...`);
@@ -261,11 +274,18 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     });
     await updateProgress(videoId, 60);
 
-    // Composite overlay onto background using ffmpeg
+    // Composite with audio, overlay only during title audio, then remove for captions area
     const finalPath = path.join(os.tmpdir(), `output_${videoId}.mp4`);
     console.log(`[${videoId}] 🎬 Starting ffmpeg composite...`);
     await updateProgress(videoId, 70);
-    await compositeOverlay(bgLocalPath, overlayPath, finalPath, videoId);
+    await compositeWithAudioAndTimedOverlay({
+      bgPath: bgLocalPath,
+      overlayPath,
+      outputPath: finalPath,
+      titleAudioPath: titleAudio.path,
+      storyAudioPath: storyAudio.path,
+      titleDuration: Math.max(0.1, titleAudio.duration || 2)
+    }, videoId);
     await updateProgress(videoId, 100);
 
     const finalUrl = `/api/videos/${path.basename(finalPath)}`;
@@ -667,18 +687,8 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
       .input(bgPath)
       .input(overlayPath)
       .complexFilter([
-        {
-          filter: 'scale2ref',
-          options: 'w=iw:h=ih',
-          inputs: '[1][0]',
-          outputs: ['ol', 'v0']
-        },
-        {
-          filter: 'overlay',
-          options: 'x=0:y=0:format=auto',
-          inputs: ['v0', 'ol'],
-          outputs: 'vout'
-        }
+        { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
+        { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'ol'], outputs: 'vout' }
       ])
       .outputOptions([
         '-map', '[vout]',
@@ -690,10 +700,57 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart'
       ])
-      .on('start', (cmd) => {
+      .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg command: ${cmd}`);
       })
-      .on('progress', async (p) => {
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
+  });
+}
+
+// New: composite background with timed overlay and concatenated title+story audio
+async function compositeWithAudioAndTimedOverlay(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(titleAudioPath)
+      .input(storyAudioPath)
+      .complexFilter([
+        // scale overlay to match video and fade it out at titleDuration
+        { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
+        // split overlay stream to add fadeout
+        { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
+        { filter: 'fade', options: `t=out:st=${titleDuration - 0.1}:d=0.1:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
+        { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'olfade'], outputs: 'vout' },
+        // concat title and story audio
+        { filter: 'anull', inputs: '2:a', outputs: 'a0' },
+        { filter: 'anull', inputs: '3:a', outputs: 'a1' },
+        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0', 'a1'], outputs: 'aout' },
+      ])
+      .outputOptions([
+        '-map', '[vout]',
+        '-map', '[aout]',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
+      })
+      .on('progress', async (p: any) => {
         try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
       })
       .on('error', reject)
