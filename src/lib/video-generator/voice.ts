@@ -1,4 +1,6 @@
 import { VoiceOption } from './types';
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference types="node" />
 
 // Map voice IDs to ElevenLabs voice IDs
 const VOICE_IDS: Record<VoiceOption['id'], string> = {
@@ -22,6 +24,10 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
   }
 
   console.log(`Generating speech for voice ${voice.id} (${voiceId})`);
+  const xiKey = (globalThis as any)?.process?.env?.ELEVENLABS_API_KEY as string | undefined;
+  if (!xiKey) {
+    throw new Error('ELEVENLABS_API_KEY is not set');
+  }
   
   try {
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
@@ -29,7 +35,7 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
       headers: {
         'Accept': 'audio/mpeg',
         'Content-Type': 'application/json',
-        'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+        'xi-api-key': xiKey,
       },
       body: JSON.stringify({
         text,

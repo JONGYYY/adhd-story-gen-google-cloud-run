@@ -305,10 +305,14 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     };
     await ensureAudible(titleAudioPath, titleDuration);
     await ensureAudible(storyAudioPath, Math.max(3, (fullStory || title).split(/\s+/).length * 0.35));
-    // Measure actual durations
+    // Measure actual durations and sizes
     let measuredTitle = 0; let measuredStory = 0;
     try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
     try { measuredStory = await getAudioDurationSeconds(storyAudioPath); } catch {}
+    try {
+      const stT = await fs.stat(titleAudioPath); const stS = await fs.stat(storyAudioPath);
+      console.log(`[${videoId}] 🔊 Audio sizes: title=${stT.size} bytes, story=${stS.size} bytes; durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
+    } catch {}
     if (measuredTitle > 0) titleDuration = measuredTitle;
     const totalDuration = Math.max(2, titleDuration + (measuredStory > 0 ? measuredStory : 0) + 1);
     try { await updateProgress(videoId, 45); } catch {}
@@ -473,11 +477,10 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
   // Base size derived from card width for stable ratio + hard cap
-  // Scale base sizes by 1.5x to enlarge typography
-  const baseFontSize = Math.floor(cardWidth * 0.056 * 1.5);
-  const maxFontPx = Math.floor(cardWidth * 0.060 * 1.5);
+  const baseFontSize = Math.floor(cardWidth * 0.056);
+  const maxFontPx = Math.floor(cardWidth * 0.060);
 
-  // Register Inter fonts if available
+  // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
   const interSemiBold = await resolveFontAsset('Inter-SemiBold.ttf');
   if (interBold) { try { GlobalFonts.registerFromPath(interBold, 'InterBold'); } catch {} }
@@ -532,21 +535,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   }
 
-  // Post-fit upscale by 1.3x, then shrink-to-fit again if needed
-  fontSize = Math.floor(fontSize * 1.3);
-  ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
-  {
-    const newLines = recomputeWrapped();
-    lines.length = 0; lines.push(...newLines);
-    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
-  }
-  while ((lines.length > maxLines || longest > maxTextWidth * targetFill) && fontSize > Math.max(18, Math.floor(baseFontSize * 0.6))) {
-    fontSize -= 1;
-    ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
-    const newLines = recomputeWrapped();
-    lines.length = 0; lines.push(...newLines);
-    longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
-  }
+  // No post-fit upscale; keep original sizing for stable appearance
 
   const lineHeight = Math.floor(fontSize * 1.22);
   const textBlockHeight = lines.length * lineHeight;
@@ -656,8 +645,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const usernameYRatio = 130 / refH;
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
     const uy = drawY + Math.round(drawH * usernameYRatio) + 20; // lower by additional 10px
-    // Match author font size exactly to computed title size
-    ctx.font = `600 ${fontSize}px ${authorFontFamily}`;
+    // Author slightly smaller than title for better hierarchy
+    const authorPx = Math.max(24, Math.floor(fontSize * 0.65));
+    ctx.font = `600 ${authorPx}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`u/${author}`, ux, uy);
@@ -835,7 +825,6 @@ async function compositeWithAudioAndTimedOverlay(
       .input(overlayPath)
       .input(titleAudioPath)
       .input(storyAudioPath)
-      .input(subsPath)
       .complexFilter([
         // scale overlay to match video and fade it out at titleDuration
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
@@ -845,9 +834,11 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // normalize audio formats (sample rate/channels) before concat to avoid silent output
-        { filter: 'aformat', options: 'sample_fmts=s16:sample_rates=44100:channel_layouts=stereo', inputs: '2:a', outputs: 'a0f' },
-        { filter: 'aformat', options: 'sample_fmts=s16:sample_rates=44100:channel_layouts=stereo', inputs: '3:a', outputs: 'a1f' },
+        // robustly normalize audio and reset timestamps to avoid silent concat
+        { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '2:a', outputs: 'a0r' },
+        { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a0r', outputs: 'a0f' },
+        { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '3:a', outputs: 'a1r' },
+        { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a1r', outputs: 'a1f' },
         { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0f', 'a1f'], outputs: 'aout' },
       ])
       .outputOptions([
@@ -864,6 +855,13 @@ async function compositeWithAudioAndTimedOverlay(
       ])
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
       })
       .on('progress', async (p: any) => {
         try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
