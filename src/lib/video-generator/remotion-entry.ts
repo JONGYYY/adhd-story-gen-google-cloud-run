@@ -476,9 +476,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Base size derived from card width for stable ratio + hard cap
-  const baseFontSize = Math.floor(cardWidth * 0.056);
-  const maxFontPx = Math.floor(cardWidth * 0.060);
+  // Base size derived from card width for stable ratio + hard cap (2x bigger)
+  const baseFontSize = Math.floor(cardWidth * 0.112);
+  const maxFontPx = Math.floor(cardWidth * 0.120);
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -509,7 +509,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // Shrink-to-fit loop with target fill ratio and line cap
   let fontSize = baseFontSize;
   const maxLines = 3;
-  const targetFill = 0.60; // longest line <= 60% of available width
+  const targetFill = 0.75; // allow larger text before wrapping
   const recomputeWrapped = () => {
     const newLines: string[] = [];
     let cur = '';
@@ -840,10 +840,14 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '3:a', outputs: 'a1r' },
         { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a1r', outputs: 'a1f' },
         { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0f', 'a1f'], outputs: 'aout' },
+        // mix in a very low-volume tone to guarantee audibility during debugging
+        { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
+        { filter: 'volume', options: '0.02', inputs: 'tone', outputs: 'toneQuiet' },
+        { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aout', 'toneQuiet'], outputs: 'aoutmix' },
       ])
       .outputOptions([
         '-map', '[vout]',
-        '-map', '[aout]',
+        '-map', '[aoutmix]',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
