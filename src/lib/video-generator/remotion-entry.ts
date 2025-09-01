@@ -845,10 +845,10 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // concat title and story audio
-        { filter: 'anull', inputs: '2:a', outputs: 'a0' },
-        { filter: 'anull', inputs: '3:a', outputs: 'a1' },
-        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0', 'a1'], outputs: 'aout' },
+        // normalize audio formats (sample rate/channels) before concat to avoid silent output
+        { filter: 'aformat', options: 'sample_fmts=s16:sample_rates=44100:channel_layouts=stereo', inputs: '2:a', outputs: 'a0f' },
+        { filter: 'aformat', options: 'sample_fmts=s16:sample_rates=44100:channel_layouts=stereo', inputs: '3:a', outputs: 'a1f' },
+        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0f', 'a1f'], outputs: 'aout' },
       ])
       .outputOptions([
         '-map', '[vout]',

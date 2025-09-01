@@ -24,7 +24,7 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
   console.log(`Generating speech for voice ${voice.id} (${voiceId})`);
   
   try {
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
       method: 'POST',
       headers: {
         'Accept': 'audio/mpeg',
@@ -33,12 +33,12 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
       },
       body: JSON.stringify({
         text,
-        model_id: 'eleven_multilingual_v2',  // Use the latest model
+        model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.75,  // Increased stability for more consistent voice
-          similarity_boost: 0.85,  // Increased similarity for better voice matching
-          style: 0.35,  // Add some style variation for more natural speech
-          use_speaker_boost: true,  // Enable speaker boost for clearer audio
+          stability: 0.6,
+          similarity_boost: 0.85,
+          style: 0.2,
+          use_speaker_boost: true,
         },
       }),
     });
