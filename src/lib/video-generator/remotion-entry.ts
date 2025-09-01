@@ -287,6 +287,24 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       await fs.writeFile(titleAudioPath, silentTitle);
       await fs.writeFile(storyAudioPath, silentStory);
     }
+    // If audio duration is still 0, synthesize an audible tone to validate mux and ensure sound
+    const ensureAudible = async (pathOut: string, seconds: number) => {
+      try {
+        const dur = await getAudioDurationSeconds(pathOut);
+        if (dur > 0.2) return;
+      } catch {}
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(`sine=frequency=880:sample_rate=22050:duration=${Math.max(0.5, seconds)}`)
+          .inputOptions(['-f', 'lavfi'])
+          .outputOptions(['-f', 'wav', '-ac', '1', '-ar', '22050'])
+          .on('error', reject)
+          .on('end', () => resolve())
+          .save(pathOut);
+      });
+    };
+    await ensureAudible(titleAudioPath, titleDuration);
+    await ensureAudible(storyAudioPath, Math.max(3, (fullStory || title).split(/\s+/).length * 0.35));
     // Measure actual durations
     let measuredTitle = 0; let measuredStory = 0;
     try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
@@ -823,9 +841,8 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
         // split overlay stream to add fadeout
         { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
-        // fade overlay to 0 right before captions start
-        { filter: 'fade', options: `t=out:st=${Math.max(0.1, titleDuration - 0.12)}:d=0.25:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
-        { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'olfade'], outputs: 'vtmp' },
+        // hard-disable overlay as soon as captions start to guarantee no overlap
+        { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
         // concat title and story audio
