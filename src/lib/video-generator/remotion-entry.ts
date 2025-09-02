@@ -476,9 +476,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Base size derived from card width for stable ratio + hard cap (2x bigger)
-  const baseFontSize = Math.floor(cardWidth * 0.112);
-  const maxFontPx = Math.floor(cardWidth * 0.120);
+  // Reduce title size by 3x from current
+  const baseFontSize = Math.floor(cardWidth * (0.112 / 3));
+  const maxFontPx = Math.floor(cardWidth * (0.120 / 3));
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -646,7 +646,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
     const uy = drawY + Math.round(drawH * usernameYRatio) + 20; // lower by additional 10px
     // Author slightly smaller than title for better hierarchy
-    const authorPx = Math.max(24, Math.floor(fontSize * 0.65));
+    const authorPx = Math.max(18, Math.floor(fontSize * 0.60));
     ctx.font = `600 ${authorPx}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
@@ -837,9 +837,11 @@ async function compositeWithAudioAndTimedOverlay(
         // robustly normalize audio and reset timestamps to avoid silent concat
         { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '2:a', outputs: 'a0r' },
         { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a0r', outputs: 'a0f' },
+        { filter: 'volume', options: '2.5', inputs: 'a0f', outputs: 'a0loud' },
         { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '3:a', outputs: 'a1r' },
         { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a1r', outputs: 'a1f' },
-        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0f', 'a1f'], outputs: 'aout' },
+        { filter: 'volume', options: '2.5', inputs: 'a1f', outputs: 'a1loud' },
+        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0loud', 'a1loud'], outputs: 'aout' },
         // mix in a very low-volume tone to guarantee audibility during debugging
         { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
         { filter: 'volume', options: '0.02', inputs: 'tone', outputs: 'toneQuiet' },
