@@ -365,6 +365,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       titleDuration: Math.max(0.1, titleDuration),
       totalDuration,
       subsPath,
+      measuredStory,
     }, videoId);
     await updateProgress(videoId, 100);
 
@@ -492,9 +493,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Increase current size by 2x for better readability
-  const baseFontSize = Math.floor(cardWidth * (0.112 / 3 * 2));
-  const maxFontPx = Math.floor(cardWidth * (0.120 / 3 * 2));
+  // Restore larger typography for readability
+  const baseFontSize = Math.floor(cardWidth * 0.112);
+  const maxFontPx = Math.floor(cardWidth * 0.130);
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -525,7 +526,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // Shrink-to-fit loop with target fill ratio and line cap
   let fontSize = baseFontSize;
   const maxLines = 3;
-  const targetFill = 0.75; // allow larger text before wrapping
+  const targetFill = 0.68; // allow large text but prevent overflow
   const recomputeWrapped = () => {
     const newLines: string[] = [];
     let cur = '';
@@ -831,10 +832,10 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
 
 // New: composite background with timed overlay and concatenated title+story audio
 async function compositeWithAudioAndTimedOverlay(
-  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string },
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
   videoId: string
 ): Promise<void> {
-  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
+  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath, measuredStory } = params;
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
@@ -862,10 +863,14 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'dynaudnorm', options: 'p=0.8:m=100', inputs: 'a1f', outputs: 'a1n' },
         { filter: 'volume', options: '3.0', inputs: 'a1n', outputs: 'a1loud' },
         { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0loud', 'a1loud'], outputs: 'aout' },
-        // mix in a very low-volume tone to guarantee audibility during debugging
-        { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
-        { filter: 'volume', options: '0.01', inputs: 'tone', outputs: 'toneQuiet' },
-        { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aout', 'toneQuiet'], outputs: 'aoutmix' },
+        // If story audio appears missing/too short, add tone quietly; otherwise pass through TTS only
+        ...(measuredStory < 0.3 ? [
+          { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
+          { filter: 'volume', options: '0.01', inputs: 'tone', outputs: 'toneQuiet' },
+          { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aout', 'toneQuiet'], outputs: 'aoutmix' },
+        ] : [
+          { filter: 'anull', inputs: 'aout', outputs: 'aoutmix' },
+        ]),
       ])
       .outputOptions([
         '-map', '[vout]',
