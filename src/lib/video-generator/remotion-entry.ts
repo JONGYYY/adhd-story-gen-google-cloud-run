@@ -226,6 +226,20 @@ async function resolveBackgroundLocalPath(category: string, videoId: string): Pr
   return localPath;
 }
 
+async function transcodeToWav(srcPath: string, dstPath: string): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    ffmpeg()
+      .input(srcPath)
+      .audioChannels(2)
+      .audioFrequency(44100)
+      .audioCodec('pcm_s16le')
+      .format('wav')
+      .on('error', reject)
+      .on('end', () => resolve(dstPath))
+      .save(dstPath);
+  });
+}
+
 export async function generateVideoWithRemotion(options: VideoGenerationOptions, videoId: string): Promise<string> {
   const category = options.background?.category || 'minecraft';
   const title = (options as any)?.story?.title || 'Your Title Here';
@@ -275,10 +289,13 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     try {
       const titleBuf = await withTimeout(generateSpeech({ text: title, voice }), 20000) as ArrayBuffer;
       const storyBuf = await withTimeout(generateSpeech({ text: fullStory || title, voice }), 30000) as ArrayBuffer;
-      titleAudioPath = path.join(os.tmpdir(), `${videoId}_title.mp3`);
-      storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.mp3`);
-      await fs.writeFile(titleAudioPath, Buffer.from(titleBuf));
-      await fs.writeFile(storyAudioPath, Buffer.from(storyBuf));
+      const titleMp3 = path.join(os.tmpdir(), `${videoId}_title.mp3`);
+      const storyMp3 = path.join(os.tmpdir(), `${videoId}_story.mp3`);
+      await fs.writeFile(titleMp3, Buffer.from(titleBuf));
+      await fs.writeFile(storyMp3, Buffer.from(storyBuf));
+      // Transcode MP3 -> WAV 44.1k stereo s16 for robust downstream filters
+      titleAudioPath = await transcodeToWav(titleMp3, path.join(os.tmpdir(), `${videoId}_title.wav`));
+      storyAudioPath = await transcodeToWav(storyMp3, path.join(os.tmpdir(), `${videoId}_story.wav`));
     } catch (e) {
       console.warn(`[${videoId}] ⚠️ TTS failed or timed out, using silent WAV fallback:`, (e as any)?.message || e);
       const silentTitle = makeSilentWav(titleDuration);
@@ -303,8 +320,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
           .save(pathOut);
       });
     };
-    await ensureAudible(titleAudioPath, titleDuration);
-    await ensureAudible(storyAudioPath, Math.max(3, (fullStory || title).split(/\s+/).length * 0.35));
+    // Do not overwrite TTS audio; rely on debug tone mix in composite for audibility
     // Measure actual durations and sizes
     let measuredTitle = 0; let measuredStory = 0;
     try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
@@ -476,9 +492,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Reduce title size by 3x from current
-  const baseFontSize = Math.floor(cardWidth * (0.112 / 3));
-  const maxFontPx = Math.floor(cardWidth * (0.120 / 3));
+  // Increase current size by 2x for better readability
+  const baseFontSize = Math.floor(cardWidth * (0.112 / 3 * 2));
+  const maxFontPx = Math.floor(cardWidth * (0.120 / 3 * 2));
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -837,14 +853,18 @@ async function compositeWithAudioAndTimedOverlay(
         // robustly normalize audio and reset timestamps to avoid silent concat
         { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '2:a', outputs: 'a0r' },
         { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a0r', outputs: 'a0f' },
-        { filter: 'volume', options: '2.5', inputs: 'a0f', outputs: 'a0loud' },
+        // normalize and boost title audio
+        { filter: 'dynaudnorm', options: 'p=0.8:m=100', inputs: 'a0f', outputs: 'a0n' },
+        { filter: 'volume', options: '3.0', inputs: 'a0n', outputs: 'a0loud' },
         { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '3:a', outputs: 'a1r' },
         { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a1r', outputs: 'a1f' },
-        { filter: 'volume', options: '2.5', inputs: 'a1f', outputs: 'a1loud' },
+        // normalize and boost story audio
+        { filter: 'dynaudnorm', options: 'p=0.8:m=100', inputs: 'a1f', outputs: 'a1n' },
+        { filter: 'volume', options: '3.0', inputs: 'a1n', outputs: 'a1loud' },
         { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0loud', 'a1loud'], outputs: 'aout' },
         // mix in a very low-volume tone to guarantee audibility during debugging
         { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
-        { filter: 'volume', options: '0.02', inputs: 'tone', outputs: 'toneQuiet' },
+        { filter: 'volume', options: '0.01', inputs: 'tone', outputs: 'toneQuiet' },
         { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aout', 'toneQuiet'], outputs: 'aoutmix' },
       ])
       .outputOptions([
