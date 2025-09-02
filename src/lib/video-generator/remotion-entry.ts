@@ -493,9 +493,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Restore larger typography for readability
-  const baseFontSize = Math.floor(cardWidth * 0.112);
-  const maxFontPx = Math.floor(cardWidth * 0.130);
+  // Increase title size by 2x from original baseline
+  const baseFontSize = Math.floor(cardWidth * (0.112 * 2));
+  const maxFontPx = Math.floor(cardWidth * (0.130 * 2));
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -526,7 +526,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // Shrink-to-fit loop with target fill ratio and line cap
   let fontSize = baseFontSize;
   const maxLines = 3;
-  const targetFill = 0.68; // allow large text but prevent overflow
+  const targetFill = 0.85; // allow very large text before wrapping
   const recomputeWrapped = () => {
     const newLines: string[] = [];
     let cur = '';
@@ -662,8 +662,8 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const usernameYRatio = 130 / refH;
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
     const uy = drawY + Math.round(drawH * usernameYRatio) + 20; // lower by additional 10px
-    // Author slightly smaller than title for better hierarchy
-    const authorPx = Math.max(18, Math.floor(fontSize * 0.60));
+    // Increase author size by 3x (relative to current)
+    const authorPx = Math.max(18, Math.floor(fontSize * 3.0));
     ctx.font = `600 ${authorPx}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
@@ -762,7 +762,6 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
     ffmpeg()
       .input(bgPath)
       .input(overlayPath)
-      .input(titleAudioPath)
       .input(storyAudioPath)
       .complexFilter([
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
@@ -851,26 +850,12 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // robustly normalize audio and reset timestamps to avoid silent concat
-        { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '2:a', outputs: 'a0r' },
-        { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a0r', outputs: 'a0f' },
-        // normalize and boost title audio
-        { filter: 'dynaudnorm', options: 'p=0.8:m=100', inputs: 'a0f', outputs: 'a0n' },
-        { filter: 'volume', options: '3.0', inputs: 'a0n', outputs: 'a0loud' },
-        { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '3:a', outputs: 'a1r' },
+        // Normalize and boost story audio only (remove concat and debug tone)
+        { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '2:a', outputs: 'a1r' },
         { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a1r', outputs: 'a1f' },
-        // normalize and boost story audio
         { filter: 'dynaudnorm', options: 'p=0.8:m=100', inputs: 'a1f', outputs: 'a1n' },
         { filter: 'volume', options: '3.0', inputs: 'a1n', outputs: 'a1loud' },
-        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0loud', 'a1loud'], outputs: 'aout' },
-        // If story audio appears missing/too short, add tone quietly; otherwise pass through TTS only
-        ...(measuredStory < 0.3 ? [
-          { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
-          { filter: 'volume', options: '0.01', inputs: 'tone', outputs: 'toneQuiet' },
-          { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aout', 'toneQuiet'], outputs: 'aoutmix' },
-        ] : [
-          { filter: 'anull', inputs: 'aout', outputs: 'aoutmix' },
-        ]),
+        { filter: 'anull', inputs: 'a1loud', outputs: 'aoutmix' },
       ])
       .outputOptions([
         '-map', '[vout]',
