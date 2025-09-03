@@ -337,6 +337,8 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
         }
       } catch {}
     }
+    // Log final audio paths and durations
+    console.log(`[${videoId}] 🔉 Using audio: title=${titleAudioPath}, story=${storyAudioPath}, durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
     try {
       const stT = await fs.stat(titleAudioPath); const stS = await fs.stat(storyAudioPath);
       console.log(`[${videoId}] 🔊 Audio sizes: title=${stT.size} bytes, story=${stS.size} bytes; durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
@@ -505,9 +507,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Decrease title size by 6x from the previously doubled baseline (0.112*2/6)
-  const baseFontSize = Math.floor(cardWidth * (0.112 * 2 / 6));
-  const maxFontPx = Math.floor(cardWidth * (0.130 * 2 / 6));
+  // Increase both title and author size by 2x from current
+  const baseFontSize = Math.floor(cardWidth * (0.112 * 2 / 6 * 2));
+  const maxFontPx = Math.floor(cardWidth * (0.130 * 2 / 6 * 2));
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
