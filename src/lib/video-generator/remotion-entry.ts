@@ -325,6 +325,18 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     let measuredTitle = 0; let measuredStory = 0;
     try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
     try { measuredStory = await getAudioDurationSeconds(storyAudioPath); } catch {}
+    // If WAV seems empty, try measuring and using the original MP3 as fallback
+    if (measuredStory < 0.2) {
+      const mp3Fallback = path.join(os.tmpdir(), `${videoId}_story.mp3`);
+      try {
+        const dmp3 = await getAudioDurationSeconds(mp3Fallback);
+        if (dmp3 > measuredStory) {
+          console.warn(`[${videoId}] ⚠️ WAV story duration ${measuredStory.toFixed(2)}s appears empty; falling back to MP3 (${dmp3.toFixed(2)}s)`);
+          storyAudioPath = mp3Fallback;
+          measuredStory = dmp3;
+        }
+      } catch {}
+    }
     try {
       const stT = await fs.stat(titleAudioPath); const stS = await fs.stat(storyAudioPath);
       console.log(`[${videoId}] 🔊 Audio sizes: title=${stT.size} bytes, story=${stS.size} bytes; durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
@@ -493,9 +505,9 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Increase title size by 2x from original baseline
-  const baseFontSize = Math.floor(cardWidth * (0.112 * 2));
-  const maxFontPx = Math.floor(cardWidth * (0.130 * 2));
+  // Decrease title size by 6x from the previously doubled baseline (0.112*2/6)
+  const baseFontSize = Math.floor(cardWidth * (0.112 * 2 / 6));
+  const maxFontPx = Math.floor(cardWidth * (0.130 * 2 / 6));
 
   // Register Inter fonts if available and prefer them; fallback to Arial
   const interBold = await resolveFontAsset('Inter-Bold.ttf');
@@ -526,7 +538,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // Shrink-to-fit loop with target fill ratio and line cap
   let fontSize = baseFontSize;
   const maxLines = 3;
-  const targetFill = 0.85; // allow very large text before wrapping
+  const targetFill = 0.72; // balanced large text without overflow
   const recomputeWrapped = () => {
     const newLines: string[] = [];
     let cur = '';
@@ -662,8 +674,8 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const usernameYRatio = 130 / refH;
     const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
     const uy = drawY + Math.round(drawH * usernameYRatio) + 20; // lower by additional 10px
-    // Increase author size by 3x (relative to current)
-    const authorPx = Math.max(18, Math.floor(fontSize * 3.0));
+    // Make author the same size as title
+    const authorPx = Math.max(18, Math.floor(fontSize));
     ctx.font = `600 ${authorPx}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
