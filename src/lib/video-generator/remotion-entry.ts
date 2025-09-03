@@ -612,7 +612,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   // Draw title left-aligned within the card
   ctx.fillStyle = 'black';
   ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
-  let y = boxY + boxPaddingY;
+  let y = boxY + boxPaddingY + 5;
   for (const line of lines) {
     const x = sidePadding + innerPad + 15; // shift 10px to the right
     ctx.fillText(line, x, y);
@@ -864,12 +864,8 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // Normalize and boost story audio only (remove concat and debug tone)
-        { filter: 'aresample', options: 'resampler=soxr:osf=s16:ocl=stereo:sample_rate=44100', inputs: '2:a', outputs: 'a1r' },
-        { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: 'a1r', outputs: 'a1f' },
-        { filter: 'dynaudnorm', options: 'p=0.8:m=100', inputs: 'a1f', outputs: 'a1n' },
-        { filter: 'volume', options: '3.0', inputs: 'a1n', outputs: 'a1loud' },
-        { filter: 'anull', inputs: 'a1loud', outputs: 'aoutmix' },
+        // Map raw story audio directly to output to isolate issues
+        { filter: 'anull', inputs: '2:a', outputs: 'aoutmix' },
       ])
       .outputOptions([
         '-map', '[vout]',
