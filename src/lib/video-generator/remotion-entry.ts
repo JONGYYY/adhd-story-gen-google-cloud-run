@@ -337,6 +337,15 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
         }
       } catch {}
     }
+    // If still effectively silent, synthesize a quiet-but-audible tone as last-resort fallback
+    if (measuredStory < 0.2) {
+      const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
+      const tonePath = path.join(os.tmpdir(), `${videoId}_story_fallback.wav`);
+      await ensureAudible(tonePath, estStory);
+      try { measuredStory = await getAudioDurationSeconds(tonePath); } catch {}
+      storyAudioPath = tonePath;
+      console.warn(`[${videoId}] ⚠️ Story audio missing; using generated tone fallback (${measuredStory.toFixed(2)}s)`);
+    }
     // Log final audio paths and durations
     console.log(`[${videoId}] 🔉 Using audio: title=${titleAudioPath}, story=${storyAudioPath}, durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
     try {
@@ -864,8 +873,11 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // Map raw story audio directly to output to isolate issues
-        { filter: 'anull', inputs: '2:a', outputs: 'aoutmix' },
+        // Map raw story audio directly to output; if container lacks audio, generate sine here
+        { filter: 'anull', inputs: '2:a', outputs: 'aStory' },
+        { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
+        { filter: 'volume', options: '0.03', inputs: 'tone', outputs: 'toneQuiet' },
+        { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aStory', 'toneQuiet'], outputs: 'aoutmix' },
       ])
       .outputOptions([
         '-map', '[vout]',
