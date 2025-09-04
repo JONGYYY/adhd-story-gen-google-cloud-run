@@ -359,6 +359,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     // Create overlay with banners + white title box
     const overlayPath = path.join(os.tmpdir(), `overlay_${videoId}.png`);
     console.log(`[${videoId}] 🖼️ Creating banner overlay...`);
+    const debugText = `dur(title)=${(measuredTitle||0).toFixed(2)}s dur(story)=${(measuredStory||0).toFixed(2)}s`;
     await createBannerOverlay({
       videoWidth,
       videoHeight,
@@ -367,6 +368,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       topBannerPath,
       bottomBannerPath,
       outputPath: overlayPath,
+      debugText,
     });
     await updateProgress(videoId, 60);
 
@@ -500,10 +502,11 @@ type OverlayParams = {
   topBannerPath: string | null;
   bottomBannerPath: string | null;
   outputPath: string;
+  debugText?: string;
 };
 
 async function createBannerOverlay(params: OverlayParams): Promise<void> {
-  const { videoWidth, videoHeight, title, author, topBannerPath, bottomBannerPath, outputPath } = params;
+  const { videoWidth, videoHeight, title, author, topBannerPath, bottomBannerPath, outputPath, debugText } = params;
   const canvas: Canvas = createCanvas(videoWidth, videoHeight);
   const ctx = canvas.getContext('2d');
 
@@ -698,6 +701,13 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     const drawW = cardWidth;
     const drawH = Math.round((botImg as any).height * scale);
     drawRounded(botImg, sidePadding, boxY + boxHeight, drawW, drawH, { tl: 0, tr: 0, br: cornerRadius, bl: cornerRadius });
+  }
+
+  // Optional debug: draw tiny text with measured durations near bottom-left
+  if (debugText) {
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.font = `bold ${Math.max(14, Math.floor(videoWidth * 0.018))}px ${titleFontFamily}`;
+    ctx.fillText(debugText, sidePadding, Math.min(videoHeight - 20, boxY + boxHeight + 40));
   }
 
   // Save overlay image
