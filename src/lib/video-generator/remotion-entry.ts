@@ -10,6 +10,7 @@ import AWS from 'aws-sdk';
 import { createCanvas, loadImage, Canvas, GlobalFonts } from '@napi-rs/canvas';
 import ffmpeg from 'fluent-ffmpeg';
 import { generateSpeech } from './voice';
+import { generateTitleAndStoryAudio } from './shared/audio';
 
 // Use node-fetch to ensure Node Readable stream body
 async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<any> {
@@ -287,15 +288,16 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     let storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.wav`);
     let titleDuration = Math.max(1.2, Math.min(6, title.length * 0.06));
     try {
-      const titleBuf = await withTimeout(generateSpeech({ text: title, voice }), 20000) as ArrayBuffer;
-      const storyBuf = await withTimeout(generateSpeech({ text: fullStory || title, voice }), 30000) as ArrayBuffer;
-      const titleMp3 = path.join(os.tmpdir(), `${videoId}_title.mp3`);
-      const storyMp3 = path.join(os.tmpdir(), `${videoId}_story.mp3`);
-      await fs.writeFile(titleMp3, Buffer.from(titleBuf));
-      await fs.writeFile(storyMp3, Buffer.from(storyBuf));
-      // Prefer direct MP3 playback to avoid any transcode-induced silence
-      titleAudioPath = titleMp3;
-      storyAudioPath = storyMp3;
+      // Use shared audio generator which handles provider, saving and duration reliably
+      const hybrid = await generateTitleAndStoryAudio(
+        title,
+        fullStory || title,
+        { provider: 'elevenlabs', voiceId: voice.id } as any,
+        videoId
+      );
+      titleAudioPath = hybrid.titleAudio.path;
+      storyAudioPath = hybrid.storyAudio.path;
+      if (hybrid.titleAudio.duration > 0) titleDuration = hybrid.titleAudio.duration;
     } catch (e) {
       console.warn(`[${videoId}] ⚠️ TTS failed or timed out, using silent WAV fallback:`, (e as any)?.message || e);
       const silentTitle = makeSilentWav(titleDuration);
