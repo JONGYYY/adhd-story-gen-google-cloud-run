@@ -293,9 +293,9 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       const storyMp3 = path.join(os.tmpdir(), `${videoId}_story.mp3`);
       await fs.writeFile(titleMp3, Buffer.from(titleBuf));
       await fs.writeFile(storyMp3, Buffer.from(storyBuf));
-      // Transcode MP3 -> WAV 44.1k stereo s16 for robust downstream filters
-      titleAudioPath = await transcodeToWav(titleMp3, path.join(os.tmpdir(), `${videoId}_title.wav`));
-      storyAudioPath = await transcodeToWav(storyMp3, path.join(os.tmpdir(), `${videoId}_story.wav`));
+      // Prefer direct MP3 playback to avoid any transcode-induced silence
+      titleAudioPath = titleMp3;
+      storyAudioPath = storyMp3;
     } catch (e) {
       console.warn(`[${videoId}] ⚠️ TTS failed or timed out, using silent WAV fallback:`, (e as any)?.message || e);
       const silentTitle = makeSilentWav(titleDuration);
@@ -885,11 +885,8 @@ async function compositeWithAudioAndTimedOverlay(
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
         // Map raw story audio directly to output; if container lacks audio, generate sine here
-        // Force select first audio stream of the story input
-        { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: '2:a', outputs: 'aStory' },
-        { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
-        { filter: 'volume', options: '0.03', inputs: 'tone', outputs: 'toneQuiet' },
-        { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aStory', 'toneQuiet'], outputs: 'aoutmix' },
+        // Hard map story audio only (no tone) so we can hear TTS clearly
+        { filter: 'anull', inputs: '2:a', outputs: 'aoutmix' },
       ])
       .outputOptions([
         '-map', '[vout]',
