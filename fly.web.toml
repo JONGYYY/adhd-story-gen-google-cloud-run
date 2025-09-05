@@ -8,6 +8,8 @@ primary_region = "iad"
   NODE_ENV = "production"
   PORT = "8080"
   REMOTION_ENABLED = "true"
+  DISABLE_ALIGNMENT = "1"
+  SKIP_REMOTE_BANNERS = "1"
 
 [http_service]
   internal_port = 8080
