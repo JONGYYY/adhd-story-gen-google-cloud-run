@@ -359,7 +359,8 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     // Create overlay with banners + white title box
     const overlayPath = path.join(os.tmpdir(), `overlay_${videoId}.png`);
     console.log(`[${videoId}] 🖼️ Creating banner overlay...`);
-    const debugText = `dur(title)=${(measuredTitle||0).toFixed(2)}s dur(story)=${(measuredStory||0).toFixed(2)}s`;
+    const srcExt = path.extname(storyAudioPath) || 'unknown';
+    const debugText = `dur(title)=${(measuredTitle||0).toFixed(2)}s dur(story)=${(measuredStory||0).toFixed(2)}s src=${srcExt}`;
     await createBannerOverlay({
       videoWidth,
       videoHeight,
@@ -884,7 +885,8 @@ async function compositeWithAudioAndTimedOverlay(
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
         // Map raw story audio directly to output; if container lacks audio, generate sine here
-        { filter: 'anull', inputs: '2:a', outputs: 'aStory' },
+        // Force select first audio stream of the story input
+        { filter: 'asetpts', options: 'PTS-STARTPTS', inputs: '2:a', outputs: 'aStory' },
         { filter: 'sine', options: `frequency=880:sample_rate=44100:duration=${Math.max(1, totalDuration)}`, inputs: null as any, outputs: 'tone' },
         { filter: 'volume', options: '0.03', inputs: 'tone', outputs: 'toneQuiet' },
         { filter: 'amix', options: 'inputs=2:duration=longest:dropout_transition=0', inputs: ['aStory', 'toneQuiet'], outputs: 'aoutmix' },
