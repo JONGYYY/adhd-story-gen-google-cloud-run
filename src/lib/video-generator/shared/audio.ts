@@ -210,11 +210,16 @@ export async function generateTTSAndAlignment(
 
 async function generateAlignment(audioPath: string, text: string): Promise<WordAlignment[]> {
 	try {
+		// Allow disabling whisper alignment via env to avoid hangs
+		if ((process.env.DISABLE_ALIGNMENT || '0') === '1') {
+			console.log('⚠️ Alignment disabled via DISABLE_ALIGNMENT=1, using fallback');
+			return generateFallbackAlignment(text);
+		}
 		console.log('🔄 Generating word alignment with Whisper...');
 		
 		const pythonPath = await resolvePythonPath();
 
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve) => {
 			// Create a simple Python script to get word timestamps
 			const alignScript = `
 import whisper
@@ -245,6 +250,14 @@ except Exception as e:
 			let stdout = '';
 			let stderr = '';
 
+			// Hard timeout to avoid hanging at ~44%
+			const timeoutMs = 10000;
+			const timeout = setTimeout(() => {
+				try { pythonProcess.kill(); } catch {}
+				console.warn('⚠️ Whisper alignment timeout; using fallback');
+				resolve(generateFallbackAlignment(text));
+			}, timeoutMs);
+
 			pythonProcess.stdout.on('data', (data) => {
 				stdout += data.toString();
 			});
@@ -254,6 +267,7 @@ except Exception as e:
 			});
 
 			pythonProcess.on('close', (code) => {
+				clearTimeout(timeout);
 				if (code === 0) {
 					try {
 						const words = JSON.parse(stdout.trim());
@@ -270,6 +284,7 @@ except Exception as e:
 
 			pythonProcess.on('error', (err) => {
 				console.error('Failed to start Whisper process:', err);
+				try { clearTimeout(timeout); } catch {}
 				resolve(generateFallbackAlignment(text));
 			});
 		});
