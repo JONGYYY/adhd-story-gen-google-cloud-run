@@ -10,6 +10,7 @@ primary_region = "iad"
   REMOTION_ENABLED = "true"
   DISABLE_ALIGNMENT = "1"
   SKIP_REMOTE_BANNERS = "1"
+  SKIP_REMOTE_BACKGROUNDS = "1"
 
 [http_service]
   internal_port = 8080

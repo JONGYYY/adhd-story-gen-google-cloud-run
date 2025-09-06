@@ -111,6 +111,13 @@ async function tryDownloadWithRetries(url: string, destPath: string, videoId: st
 }
 
 async function resolveBackgroundLocalPath(category: string, videoId: string): Promise<string> {
+  // Fast path: skip any remote lookups if explicitly requested
+  if ((process.env.SKIP_REMOTE_BACKGROUNDS || '0') === '1') {
+    const localPath = path.join(process.cwd(), 'public', 'backgrounds', category, '1.mp4');
+    await fs.access(localPath);
+    console.log(`[${videoId}] 🚫 Remote backgrounds disabled; using local ${localPath}`);
+    return localPath;
+  }
   const preferredClip = '1.mp4';
   const baseUrl = process.env.BACKGROUND_BASE_URL || '';
   const cacheDir = path.join(os.tmpdir(), 'bg_cache');
