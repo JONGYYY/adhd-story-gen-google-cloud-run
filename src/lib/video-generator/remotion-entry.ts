@@ -366,30 +366,15 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
               storyAudioPath = m4a;
               await logAudioProbe('story-alt', storyAudioPath);
             } else {
-              throw new Error(`alt m4a duration=${d2}`);
+              console.warn(`[${videoId}] ⚠️ Remuxed M4A still too short (${d2}); using silent audio (no tone).`);
             }
           } catch (e2) {
-            console.warn(`[${videoId}] ⚠️ TTS MP3 invalid and M4A remux failed: ${(e2 as any)?.message || e2}`);
-            const estStory = Math.max(3, Math.min(30, (fullStory || title).split(/\s+/).length * 0.35));
-            const tonePath = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
-            await new Promise<void>((resolve, reject) => {
-              ffmpeg()
-                .input(`sine=frequency=880:sample_rate=44100:duration=${estStory}`)
-                .inputOptions(['-f', 'lavfi'])
-                .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
-                .on('error', reject)
-                .on('end', () => resolve())
-                .save(tonePath);
-            });
-            storyAudioPath = tonePath;
+            console.warn(`[${videoId}] ⚠️ TTS MP3 invalid and M4A remux failed: ${(e2 as any)?.message || e2}. Using silent audio.`);
           }
         }
       } catch (eDur) {
         console.warn(`[${videoId}] ⚠️ Failed to measure MP3 duration: ${(eDur as any)?.message || eDur}`);
       }
-      await logAudioProbe('title', titleAudioPath);
-      await logAudioProbe('story', storyAudioPath);
-      storyAudioPath = storyWavBoosted;
       await logAudioProbe('title', titleAudioPath);
       await logAudioProbe('story', storyAudioPath);
       // If probe shows no audio stream for MP3, remux to AAC (m4a)
@@ -403,31 +388,12 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
         }
       } catch {}
     } catch (e) {
-      console.warn(`[${videoId}] ⚠️ TTS failed or timed out, generating audible tone fallback:`, (e as any)?.message || e);
-      const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
-      // Generate a short title beep and a longer story tone so output is clearly audible
-      const titleTone = path.join(os.tmpdir(), `${videoId}_title_tone.wav`);
-      const storyTone = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg()
-          .input(`sine=frequency=880:sample_rate=44100:duration=${Math.max(0.6, Math.min(3, titleDuration))}`)
-          .inputOptions(['-f', 'lavfi'])
-          .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
-          .on('error', reject)
-          .on('end', () => resolve())
-          .save(titleTone);
-      });
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg()
-          .input(`sine=frequency=880:sample_rate=44100:duration=${estStory}`)
-          .inputOptions(['-f', 'lavfi'])
-          .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
-          .on('error', reject)
-          .on('end', () => resolve())
-          .save(storyTone);
-      });
-      titleAudioPath = titleTone;
-      storyAudioPath = storyTone;
+      console.warn(`[${videoId}] ⚠️ TTS failed or timed out; proceeding without tone:`, (e as any)?.message || e);
+      const silentTitle = makeSilentWav(Math.max(0.6, Math.min(3, titleDuration)));
+      const estStory = Math.max(2.5, Math.min(30, (fullStory || title).split(/\s+/).length * 0.35));
+      const silentStory = makeSilentWav(estStory);
+      await fs.writeFile(titleAudioPath, silentTitle);
+      await fs.writeFile(storyAudioPath, silentStory);
     }
     // If audio duration is still 0, synthesize an audible tone to validate mux and ensure sound
     const ensureAudible = async (pathOut: string, seconds: number) => {
