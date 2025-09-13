@@ -346,50 +346,49 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       await fs.writeFile(titleMp3, Buffer.from(titleBuf));
       await fs.writeFile(storyMp3, Buffer.from(storyBuf));
       // Force transcode to WAV (44.1kHz stereo) to ensure reliable decoding across players
-      const titleWav = path.join(os.tmpdir(), `${videoId}_title.wav`);
-      const storyWav = path.join(os.tmpdir(), `${videoId}_story.wav`);
-      await transcodeToWav(titleMp3, titleWav);
-      // Normalize and aggressively boost story to ensure audibility even if very quiet
-      const storyWavBoosted = path.join(os.tmpdir(), `${videoId}_story_boosted.wav`);
-      await transcodeToWav(storyMp3, storyWav);
-      await normalizeAndBoostWav(storyWav, storyWavBoosted);
-      // Measure duration; only fall back if truly zero/too short
+      // Prefer using ElevenLabs MP3 directly to avoid any transcode artifacts
+      const stTitle = await fs.stat(titleMp3).catch(() => ({ size: 0 } as any));
+      const stStory = await fs.stat(storyMp3).catch(() => ({ size: 0 } as any));
+      console.log(`[${videoId}] 📦 TTS bytes: title=${stTitle.size} story=${stStory.size}`);
+      titleAudioPath = titleMp3;
+      storyAudioPath = storyMp3;
+      // Validate story duration; if zero or too short, try M4A remux before any tone
       try {
-        const d = await getAudioDurationSeconds(storyWavBoosted);
-        console.log(`[${videoId}] 🧪 Boosted story duration: ${d.toFixed(2)}s`);
-        if (!Number.isFinite(d) || d <= 0.05) {
-          // Try remux original MP3 to M4A as alternate container
+        const dmp3 = await getAudioDurationSeconds(storyAudioPath);
+        console.log(`[${videoId}] 🧪 MP3 story duration: ${dmp3.toFixed(2)}s`);
+        if (!Number.isFinite(dmp3) || dmp3 <= 0.05 || stStory.size < 2000) {
           const m4a = path.join(os.tmpdir(), `${videoId}_story_alt.m4a`);
           try {
             await remuxToM4A(storyMp3, m4a);
             const d2 = await getAudioDurationSeconds(m4a);
+            console.log(`[${videoId}] 🧪 Remuxed M4A duration: ${d2.toFixed(2)}s`);
             if (Number.isFinite(d2) && d2 > 0.2) {
               storyAudioPath = m4a;
               await logAudioProbe('story-alt', storyAudioPath);
             } else {
               throw new Error(`alt m4a duration=${d2}`);
             }
-          } catch {
+          } catch (e2) {
+            console.warn(`[${videoId}] ⚠️ TTS MP3 invalid and M4A remux failed: ${(e2 as any)?.message || e2}`);
+            const estStory = Math.max(3, Math.min(30, (fullStory || title).split(/\s+/).length * 0.35));
             const tonePath = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
             await new Promise<void>((resolve, reject) => {
               ffmpeg()
-                .input(`sine=frequency=880:sample_rate=44100:duration=${Math.max(2, Math.min(30, (fullStory || title).split(/\s+/).length * 0.35))}`)
+                .input(`sine=frequency=880:sample_rate=44100:duration=${estStory}`)
                 .inputOptions(['-f', 'lavfi'])
                 .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
                 .on('error', reject)
                 .on('end', () => resolve())
                 .save(tonePath);
             });
-            console.warn(`[${videoId}] ⚠️ Story audio too short after normalization; using tone fallback.`);
             storyAudioPath = tonePath;
           }
-        } else {
-          storyAudioPath = storyWavBoosted;
         }
-      } catch {
-        storyAudioPath = storyWavBoosted;
+      } catch (eDur) {
+        console.warn(`[${videoId}] ⚠️ Failed to measure MP3 duration: ${(eDur as any)?.message || eDur}`);
       }
-      titleAudioPath = titleWav;
+      await logAudioProbe('title', titleAudioPath);
+      await logAudioProbe('story', storyAudioPath);
       storyAudioPath = storyWavBoosted;
       await logAudioProbe('title', titleAudioPath);
       await logAudioProbe('story', storyAudioPath);
