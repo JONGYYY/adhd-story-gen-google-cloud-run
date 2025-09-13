@@ -395,12 +395,31 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
         }
       } catch {}
     } catch (e) {
-      console.warn(`[${videoId}] ⚠️ TTS failed or timed out, using silent WAV fallback:`, (e as any)?.message || e);
-      const silentTitle = makeSilentWav(titleDuration);
+      console.warn(`[${videoId}] ⚠️ TTS failed or timed out, generating audible tone fallback:`, (e as any)?.message || e);
       const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
-      const silentStory = makeSilentWav(estStory);
-      await fs.writeFile(titleAudioPath, silentTitle);
-      await fs.writeFile(storyAudioPath, silentStory);
+      // Generate a short title beep and a longer story tone so output is clearly audible
+      const titleTone = path.join(os.tmpdir(), `${videoId}_title_tone.wav`);
+      const storyTone = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(`sine=frequency=880:sample_rate=44100:duration=${Math.max(0.6, Math.min(3, titleDuration))}`)
+          .inputOptions(['-f', 'lavfi'])
+          .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
+          .on('error', reject)
+          .on('end', () => resolve())
+          .save(titleTone);
+      });
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(`sine=frequency=880:sample_rate=44100:duration=${estStory}`)
+          .inputOptions(['-f', 'lavfi'])
+          .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
+          .on('error', reject)
+          .on('end', () => resolve())
+          .save(storyTone);
+      });
+      titleAudioPath = titleTone;
+      storyAudioPath = storyTone;
     }
     // If audio duration is still 0, synthesize an audible tone to validate mux and ensure sound
     const ensureAudible = async (pathOut: string, seconds: number) => {
@@ -991,12 +1010,14 @@ async function compositeWithAudioAndTimedOverlay(
         '-map', '[vout]',
         // Map audio from the 4th input (storyAudioPath) directly
         '-map', '3:a',
-        // Ensure audible output
-        '-af', 'volume=2.5',
+        // Ensure audible output: upmix to stereo, resample 44.1kHz, boost volume
+        '-af', 'pan=stereo|c0=c0|c1=c0,aresample=44100,volume=15dB',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
         '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
         '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
