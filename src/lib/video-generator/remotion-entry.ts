@@ -326,9 +326,13 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       const storyMp3 = path.join(os.tmpdir(), `${videoId}_story.mp3`);
       await fs.writeFile(titleMp3, Buffer.from(titleBuf));
       await fs.writeFile(storyMp3, Buffer.from(storyBuf));
-      // Prefer direct MP3 playback to avoid any transcode-induced silence
-      titleAudioPath = titleMp3;
-      storyAudioPath = storyMp3;
+      // Force transcode to WAV (44.1kHz stereo) to ensure reliable decoding across players
+      const titleWav = path.join(os.tmpdir(), `${videoId}_title.wav`);
+      const storyWav = path.join(os.tmpdir(), `${videoId}_story.wav`);
+      await transcodeToWav(titleMp3, titleWav);
+      await transcodeToWav(storyMp3, storyWav);
+      titleAudioPath = titleWav;
+      storyAudioPath = storyWav;
       await logAudioProbe('title', titleAudioPath);
       await logAudioProbe('story', storyAudioPath);
       // If probe shows no audio stream for MP3, remux to AAC (m4a)
@@ -860,6 +864,8 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
         '-preset', 'ultrafast',
         '-crf', '23',
         '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
         '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart'
