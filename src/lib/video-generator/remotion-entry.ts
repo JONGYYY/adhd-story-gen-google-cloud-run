@@ -257,6 +257,21 @@ async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<s
   });
 }
 
+async function isWavSilent(filePath: string, sampleBytes = 22050 * 2 * 2): Promise<boolean> {
+  try {
+    const buf = await fs.readFile(filePath);
+    // Skip 44-byte WAV header
+    const start = 44;
+    const end = Math.min(buf.length, start + sampleBytes);
+    for (let i = start; i < end; i++) {
+      if (buf[i] !== 0) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     ffmpeg()
@@ -351,6 +366,20 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       const storyWavBoosted = path.join(os.tmpdir(), `${videoId}_story_boosted.wav`);
       await transcodeToWav(storyMp3, storyWav);
       await normalizeAndBoostWav(storyWav, storyWavBoosted);
+      if (await isWavSilent(storyWavBoosted)) {
+        const tonePath = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg()
+            .input(`sine=frequency=880:sample_rate=44100:duration=${Math.max(2, Math.min(30, (fullStory || title).split(/\s+/).length * 0.35))}`)
+            .inputOptions(['-f', 'lavfi'])
+            .outputOptions(['-f', 'wav', '-ac', '2', '-ar', '44100', '-filter:a', 'volume=0.7'])
+            .on('error', reject)
+            .on('end', () => resolve())
+            .save(tonePath);
+        });
+        console.warn(`[${videoId}] ⚠️ Story audio appears silent after normalization; using tone fallback.`);
+        storyAudioPath = tonePath;
+      }
       titleAudioPath = titleWav;
       storyAudioPath = storyWavBoosted;
       await logAudioProbe('title', titleAudioPath);
