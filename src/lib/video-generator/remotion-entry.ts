@@ -1005,13 +1005,16 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
+        // AUDIO: upmix mono->stereo, resample to 44.1kHz, apply strong gain to ensure audibility
+        { filter: 'pan', options: 'stereo|c0=c0|c1=c0', inputs: '3:a', outputs: 'a_pan' },
+        { filter: 'aresample', options: '44100', inputs: 'a_pan', outputs: 'a_rs' },
+        { filter: 'volume', options: '15dB', inputs: 'a_rs', outputs: 'aout' },
       ])
       .outputOptions([
         '-map', '[vout]',
-        // Map audio from the 4th input (storyAudioPath) directly
-        '-map', '3:a',
+        // Map filtered audio
+        '-map', '[aout]',
         // Ensure audible output: upmix to stereo, resample 44.1kHz, boost volume
-        '-af', 'pan=stereo|c0=c0|c1=c0,aresample=44100,volume=15dB',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
