@@ -240,6 +240,23 @@ async function transcodeToWav(srcPath: string, dstPath: string): Promise<string>
   });
 }
 
+async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    ffmpeg()
+      .input(srcPath)
+      .outputOptions([
+        '-af', 'dynaudnorm=f=250:g=31:m=5,volume=20dB',
+        '-ar', '44100',
+        '-ac', '2',
+      ])
+      .audioCodec('pcm_s16le')
+      .format('wav')
+      .on('error', reject)
+      .on('end', () => resolve(dstPath))
+      .save(dstPath);
+  });
+}
+
 async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     ffmpeg()
@@ -330,9 +347,12 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       const titleWav = path.join(os.tmpdir(), `${videoId}_title.wav`);
       const storyWav = path.join(os.tmpdir(), `${videoId}_story.wav`);
       await transcodeToWav(titleMp3, titleWav);
+      // Normalize and aggressively boost story to ensure audibility even if very quiet
+      const storyWavBoosted = path.join(os.tmpdir(), `${videoId}_story_boosted.wav`);
       await transcodeToWav(storyMp3, storyWav);
+      await normalizeAndBoostWav(storyWav, storyWavBoosted);
       titleAudioPath = titleWav;
-      storyAudioPath = storyWav;
+      storyAudioPath = storyWavBoosted;
       await logAudioProbe('title', titleAudioPath);
       await logAudioProbe('story', storyAudioPath);
       // If probe shows no audio stream for MP3, remux to AAC (m4a)
