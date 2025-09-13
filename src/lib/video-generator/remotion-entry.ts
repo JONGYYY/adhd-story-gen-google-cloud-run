@@ -884,13 +884,11 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // Map raw story audio directly to output; if container lacks audio, generate sine here
-        // Hard map story audio only (no tone) so we can hear TTS clearly
-        { filter: 'anull', inputs: '2:a', outputs: 'aoutmix' },
       ])
       .outputOptions([
         '-map', '[vout]',
-        '-map', '[aoutmix]',
+        // Map audio from the 4th input (storyAudioPath) directly
+        '-map', '3:a',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
