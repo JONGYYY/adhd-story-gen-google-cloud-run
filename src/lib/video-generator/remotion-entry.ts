@@ -240,6 +240,39 @@ async function transcodeToWav(srcPath: string, dstPath: string): Promise<string>
   });
 }
 
+async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    ffmpeg()
+      .input(srcPath)
+      .outputOptions(['-c:a', 'aac', '-b:a', '192k'])
+      .on('error', reject)
+      .on('end', () => resolve(dstPath))
+      .save(dstPath);
+  });
+}
+
+async function logAudioProbe(tag: string, audioPath: string): Promise<void> {
+  await new Promise<void>((resolve) => {
+    ffmpeg(audioPath).ffprobe((err, data) => {
+      if (err) {
+        console.log(`[probe:${tag}] error: ${err.message}`);
+        return resolve();
+      }
+      try {
+        const streams = (data?.streams || []).map((s: any) => ({
+          index: s?.index,
+          codec: s?.codec_name,
+          type: s?.codec_type,
+          channels: s?.channels,
+          sample_rate: s?.sample_rate,
+        }));
+        console.log(`[probe:${tag}] format=${data?.format?.format_name} duration=${data?.format?.duration} streams=${JSON.stringify(streams)}`);
+      } catch {}
+      resolve();
+    });
+  });
+}
+
 export async function generateVideoWithRemotion(options: VideoGenerationOptions, videoId: string): Promise<string> {
   const category = options.background?.category || 'minecraft';
   const title = (options as any)?.story?.title || 'Your Title Here';
@@ -296,6 +329,18 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       // Prefer direct MP3 playback to avoid any transcode-induced silence
       titleAudioPath = titleMp3;
       storyAudioPath = storyMp3;
+      await logAudioProbe('title', titleAudioPath);
+      await logAudioProbe('story', storyAudioPath);
+      // If probe shows no audio stream for MP3, remux to AAC (m4a)
+      try {
+        const storyDur = await getAudioDurationSeconds(storyAudioPath);
+        if (!Number.isFinite(storyDur) || storyDur <= 0.01) {
+          const m4a = path.join(os.tmpdir(), `${videoId}_story.m4a`);
+          await remuxToM4A(storyAudioPath, m4a);
+          storyAudioPath = m4a;
+          await logAudioProbe('story-remux', storyAudioPath);
+        }
+      } catch {}
     } catch (e) {
       console.warn(`[${videoId}] ⚠️ TTS failed or timed out, using silent WAV fallback:`, (e as any)?.message || e);
       const silentTitle = makeSilentWav(titleDuration);
@@ -900,6 +945,7 @@ async function compositeWithAudioAndTimedOverlay(
       ])
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ mapping: video=[vout] audio=3:a`);
       })
       .on('stderr', (line: any) => {
         if (typeof line === 'string') {
