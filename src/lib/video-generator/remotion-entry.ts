@@ -438,6 +438,8 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       subsPath,
       measuredStory,
     }, videoId);
+    // Probe final mux to confirm audio stream presence
+    try { await logAudioProbe('final-video', finalPath); } catch {}
     await updateProgress(videoId, 100);
 
     const finalUrl = `/api/videos/${path.basename(finalPath)}`;
@@ -934,6 +936,8 @@ async function compositeWithAudioAndTimedOverlay(
         '-map', '[vout]',
         // Map audio from the 4th input (storyAudioPath) directly
         '-map', '3:a',
+        // Ensure audible output
+        '-af', 'volume=2.5',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
@@ -941,7 +945,9 @@ async function compositeWithAudioAndTimedOverlay(
         '-b:a', '192k',
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
-        `-t`, `${Math.max(1, totalDuration)}`
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
       ])
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
