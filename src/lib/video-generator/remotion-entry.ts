@@ -345,6 +345,12 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       const storyMp3 = path.join(os.tmpdir(), `${videoId}_story.mp3`);
       await fs.writeFile(titleMp3, Buffer.from(titleBuf));
       await fs.writeFile(storyMp3, Buffer.from(storyBuf));
+      // Persist TTS MP3s with stable names for verification
+      try {
+        const ttsCopy = path.join(os.tmpdir(), `tts_${videoId}.mp3`);
+        await fs.copyFile(storyMp3, ttsCopy);
+        console.log(`[${videoId}] 🔗 TTS MP3 available at /api/videos/${path.basename(ttsCopy)}`);
+      } catch {}
       // Force transcode to WAV (44.1kHz stereo) to ensure reliable decoding across players
       // Prefer using ElevenLabs MP3 directly to avoid any transcode artifacts
       const stTitle = await fs.stat(titleMp3).catch(() => ({ size: 0 } as any));
@@ -979,16 +985,11 @@ async function compositeWithAudioAndTimedOverlay(
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
         // burn subtitles (centered one-word) starting just after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
-        // AUDIO: upmix mono->stereo, resample to 44.1kHz, apply strong gain to ensure audibility
-        { filter: 'pan', options: 'stereo|c0=c0|c1=c0', inputs: '3:a', outputs: 'a_pan' },
-        { filter: 'aresample', options: '44100', inputs: 'a_pan', outputs: 'a_rs' },
-        { filter: 'volume', options: '15dB', inputs: 'a_rs', outputs: 'aout' },
       ])
       .outputOptions([
         '-map', '[vout]',
-        // Map filtered audio
-        '-map', '[aout]',
-        // Ensure audible output: upmix to stereo, resample 44.1kHz, boost volume
+        // Map story audio input directly (ffmpeg will decode MP3 and encode to AAC)
+        '-map', '3:a',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
