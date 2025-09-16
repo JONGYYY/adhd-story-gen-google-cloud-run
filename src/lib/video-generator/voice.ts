@@ -54,6 +54,7 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
 
       if (response.ok) {
         const buf = await response.arrayBuffer();
+        console.log(`Streaming TTS response: ${buf.byteLength} bytes, content-type: ${response.headers.get('content-type')}`);
         if (buf.byteLength > 2048) {
           console.log('Successfully received streaming audio');
           return buf;
@@ -89,7 +90,7 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
         throw new Error(`Failed to generate speech (fallback): ${resp2.status} ${resp2.statusText} ${errorText}`);
       }
       const buf2 = await resp2.arrayBuffer();
-      console.log(`Non-stream audio received: ${buf2.byteLength} bytes`);
+      console.log(`Non-stream audio received: ${buf2.byteLength} bytes, content-type: ${resp2.headers.get('content-type')}`);
       if (buf2.byteLength <= 2048) {
         throw new Error(`Non-stream audio too small: ${buf2.byteLength} bytes`);
       }
