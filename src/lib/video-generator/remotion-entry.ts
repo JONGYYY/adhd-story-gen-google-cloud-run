@@ -240,6 +240,54 @@ async function transcodeToWav(srcPath: string, dstPath: string): Promise<string>
   });
 }
 
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
+  });
+}
+
 async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     ffmpeg()
@@ -257,6 +305,54 @@ async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<s
   });
 }
 
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
+  });
+}
+
 // Removed byte-level silence check; rely on measured duration instead
 
 async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
@@ -267,6 +363,54 @@ async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
       .on('error', reject)
       .on('end', () => resolve(dstPath))
       .save(dstPath);
+  });
+}
+
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
   });
 }
 
@@ -289,6 +433,54 @@ async function logAudioProbe(tag: string, audioPath: string): Promise<void> {
       } catch {}
       resolve();
     });
+  });
+}
+
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
   });
 }
 
@@ -478,13 +670,63 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     // Composite with audio, overlay only during title audio, then remove for captions area
     const finalPath = path.join(os.tmpdir(), `output_${videoId}.mp4`);
     console.log(`[${videoId}] 🎬 Starting ffmpeg composite...`);
+    
+    // CRITICAL: Inspect story audio file before composition
+    let finalStoryAudioPath = storyAudioPath;
+    try {
+      const storyStats = await fs.stat(storyAudioPath);
+      console.log(`[${videoId}] 🔍 Story audio file: ${storyAudioPath}, size: ${storyStats.size} bytes`);
+      
+      // ffprobe the story file to check for audio streams
+      let hasValidAudioStream = false;
+      await new Promise<void>((resolve) => {
+        ffmpeg(storyAudioPath).ffprobe((err, data) => {
+          if (err) {
+            console.log(`[${videoId}] ❌ ffprobe story audio failed: ${err.message}`);
+          } else {
+            const audioStreams = (data?.streams || []).filter((s: any) => s.codec_type === 'audio');
+            console.log(`[${videoId}] 🔍 Story audio streams: ${audioStreams.length}`);
+            audioStreams.forEach((s: any, i: number) => {
+              console.log(`[${videoId}] 🔍 Stream ${i}: codec=${s.codec_name}, channels=${s.channels}, sample_rate=${s.sample_rate}`);
+            });
+            hasValidAudioStream = audioStreams.length > 0;
+          }
+          resolve();
+        });
+      });
+      
+      // If no valid audio stream or file is too small, force remux to AAC
+      if (!hasValidAudioStream || storyStats.size < 2000) {
+        console.log(`[${videoId}] ⚠️ Story audio invalid, remuxing to AAC...`);
+        
+        // Log first 64 bytes to verify MP3 header
+        try {
+          const header = await fs.readFile(storyAudioPath, { encoding: null });
+          const hex = header.slice(0, 64).toString('hex').match(/.{2}/g)?.join(' ') || '';
+          console.log(`[${videoId}] 🔍 First 64 bytes (hex): ${hex}`);
+          const isMP3 = header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33; // ID3
+          const isMP3Frame = header[0] === 0xFF && (header[1] & 0xE0) === 0xE0; // MP3 frame sync
+          console.log(`[${videoId}] 🔍 MP3 header check: ID3=${isMP3}, FrameSync=${isMP3Frame}`);
+        } catch (e) {
+          console.log(`[${videoId}] ❌ Failed to read header: ${(e as any)?.message || e}`);
+        }
+        
+        const aacPath = path.join(os.tmpdir(), `${videoId}_story_forced.m4a`);
+        await remuxToM4A(storyAudioPath, aacPath);
+        finalStoryAudioPath = aacPath;
+        console.log(`[${videoId}] ✅ Remuxed to AAC: ${aacPath}`);
+      }
+    } catch (e) {
+      console.error(`[${videoId}] ❌ Failed to inspect story audio: ${(e as any)?.message || e}`);
+    }
+    
     await updateProgress(videoId, 70);
     await compositeWithAudioAndTimedOverlay({
       bgPath: bgLocalPath,
       overlayPath,
       outputPath: finalPath,
       titleAudioPath: titleAudioPath,
-      storyAudioPath: storyAudioPath,
+      storyAudioPath: finalStoryAudioPath,
       titleDuration: Math.max(0.1, titleDuration),
       totalDuration,
       subsPath,
@@ -930,6 +1172,54 @@ async function compositeOverlay(bgPath: string, overlayPath: string, outputPath:
   });
 }
 
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
+  });
+}
+
 // ffprobe duration helper
 async function getAudioDurationSeconds(audioPath: string): Promise<number> {
   return await new Promise<number>((resolve, reject) => {
@@ -938,6 +1228,54 @@ async function getAudioDurationSeconds(audioPath: string): Promise<number> {
       const d = Number(data?.format?.duration || 0);
       resolve(d > 0 ? d : 0);
     });
+  });
+}
+
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
   });
 }
 
@@ -970,6 +1308,22 @@ async function compositeWithAudioAndTimedOverlay(
   videoId: string
 ): Promise<void> {
   const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath, measuredStory } = params;
+  
+  // Try the complex filter approach first, fallback to simple container mapping
+  try {
+    await compositeWithComplexFilter(params, videoId);
+    return;
+  } catch (error) {
+    console.warn(`[${videoId}] ⚠️ Complex filter failed, trying simple container mapping: ${(error as any)?.message || error}`);
+    await compositeWithSimpleMapping(params, videoId);
+  }
+}
+
+async function compositeWithComplexFilter(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
@@ -1006,10 +1360,59 @@ async function compositeWithAudioAndTimedOverlay(
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
         console.log(`[${videoId}] ▶️ mapping: video=[vout] audio=3:a`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${titleAudioPath}, 3=${storyAudioPath}`);
       })
       .on('stderr', (line: any) => {
         if (typeof line === 'string') {
-          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched')) {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
+            console.log(`[${videoId}] ffmpeg: ${line}`);
+          }
+        }
+      })
+      .on('progress', async (p: any) => {
+        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
+      })
+      .on('error', reject)
+      .on('end', () => resolve())
+      .save(outputPath);
+  });
+}
+
+async function compositeWithSimpleMapping(
+  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
+  videoId: string
+): Promise<void> {
+  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  await new Promise<void>((resolve, reject) => {
+    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
+    ffmpeg()
+      .input(bgPath)
+      .input(overlayPath)
+      .input(storyAudioPath)
+      .outputOptions([
+        '-map', '0:v',  // Background video
+        '-map', '2:a',  // Story audio directly
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-ac', '2',
+        '-ar', '44100',
+        '-b:a', '192k',
+        '-pix_fmt', 'yuv420p',
+        '-movflags', '+faststart',
+        `-t`, `${Math.max(1, totalDuration)}`,
+        '-shortest',
+        '-loglevel', 'debug'
+      ])
+      .on('start', (cmd: any) => {
+        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
+        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
+        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
+      })
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') {
+          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
             console.log(`[${videoId}] ffmpeg: ${line}`);
           }
         }
