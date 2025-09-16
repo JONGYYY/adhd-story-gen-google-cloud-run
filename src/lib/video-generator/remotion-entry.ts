@@ -1231,54 +1231,6 @@ async function getAudioDurationSeconds(audioPath: string): Promise<number> {
   });
 }
 
-async function compositeWithSimpleMapping(
-  params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
-  videoId: string
-): Promise<void> {
-  const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
-  await new Promise<void>((resolve, reject) => {
-    console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
-    ffmpeg()
-      .input(bgPath)
-      .input(overlayPath)
-      .input(storyAudioPath)
-      .outputOptions([
-        '-map', '0:v',  // Background video
-        '-map', '2:a',  // Story audio directly
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-ac', '2',
-        '-ar', '44100',
-        '-b:a', '192k',
-        '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart',
-        `-t`, `${Math.max(1, totalDuration)}`,
-        '-shortest',
-        '-loglevel', 'debug'
-      ])
-      .on('start', (cmd: any) => {
-        console.log(`[${videoId}] ▶️ ffmpeg (simple mapping) command: ${cmd}`);
-        console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${storyAudioPath}`);
-        console.log(`[${videoId}] ▶️ mapping: video=0:v audio=2:a`);
-      })
-      .on('stderr', (line: any) => {
-        if (typeof line === 'string') {
-          if (line.includes('Stream') || line.includes('audio') || line.includes('Error') || line.includes('Matched') || line.includes('Input #')) {
-            console.log(`[${videoId}] ffmpeg: ${line}`);
-          }
-        }
-      })
-      .on('progress', async (p: any) => {
-        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
-      })
-      .on('error', reject)
-      .on('end', () => resolve())
-      .save(outputPath);
-  });
-}
-
 // Build center one-word ASS subtitles aligned to audio length, with optional start offset
 async function buildCenterWordAss(text: string, audioPath: string, outAssPath: string, startOffsetSec = 0): Promise<void> {
   const words = text.split(/\s+/).filter(Boolean);
