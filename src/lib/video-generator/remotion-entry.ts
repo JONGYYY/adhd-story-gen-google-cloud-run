@@ -456,6 +456,25 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
           storyAudioPath = ensured;
           await logAudioProbe('story-ensured', storyAudioPath);
         }
+        // If still effectively silent by volume, fallback to tone
+        try {
+          const vol2 = await analyzeVolumeDb(storyAudioPath);
+          if (Number.isFinite(vol2.mean) && vol2.mean < -60) {
+            const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
+            const tonePath = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
+            await new Promise<void>((resolve, reject) => {
+              ffmpeg()
+                .input(`sine=frequency=880:sample_rate=22050:duration=${Math.max(0.5, estStory)}`)
+                .inputOptions(['-f', 'lavfi'])
+                .outputOptions(['-f', 'wav', '-ac', '1', '-ar', '22050'])
+                .on('error', reject)
+                .on('end', () => resolve())
+                .save(tonePath);
+            });
+            storyAudioPath = tonePath;
+            console.warn(`[${videoId}] ⚠️ Story audio too quiet (mean=${vol2.mean} dB); using generated tone fallback.`);
+          }
+        } catch {}
       } catch (e) {
         console.warn(`[${videoId}] ⚠️ ensureDecodableAudio failed: ${(e as any)?.message || e}`);
       }
