@@ -279,6 +279,21 @@ async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<s
   });
 }
 
+async function isWavSilent(wavPath: string): Promise<boolean> {
+  try {
+    const buf = await fs.readFile(wavPath);
+    if (buf.length <= 48) return true;
+    // Skip 44-byte header. Check a window of samples for any non-zero
+    const data = buf.subarray(44);
+    for (let i = 0; i < Math.min(data.length, 20000); i++) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureDecodableAudio(inputPath: string, videoId: string): Promise<string> {
   // Probe streams
   let hasAudio = false;
@@ -300,6 +315,22 @@ async function ensureDecodableAudio(inputPath: string, videoId: string): Promise
   // Transcode to WAV for stable decoding and boosting
   const wav = path.join(os.tmpdir(), `${videoId}_story.wav`);
   await transcodeToWav(inputPath, wav);
+  // Detect absolute silence quickly
+  if (await isWavSilent(wav)) {
+    const estDur = Math.max(3, 10);
+    const tonePath = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg()
+        .input(`sine=frequency=880:sample_rate=22050:duration=${estDur}`)
+        .inputOptions(['-f', 'lavfi'])
+        .outputOptions(['-f', 'wav', '-ac', '1', '-ar', '22050'])
+        .on('error', reject)
+        .on('end', () => resolve())
+        .save(tonePath);
+    });
+    console.warn(`[${videoId}] ⚠️ WAV detected silent; replacing with generated tone.`);
+    return tonePath;
+  }
   const vol = await analyzeVolumeDb(wav);
   console.log(`[${videoId}] 🔊 story WAV volume: mean=${vol.mean} dB max=${vol.max} dB`);
   if (!Number.isFinite(vol.mean) || vol.mean < -50) {
