@@ -1154,6 +1154,8 @@ async function compositeWithComplexFilter(
   videoId: string
 ): Promise<void> {
   const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
+  const gain = Number(process.env.AUDIO_GAIN_DB || '0');
+  const audioGainOpts = Number.isFinite(gain) && gain !== 0 ? ['-filter:a', `volume=${gain}dB`] : [];
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input(bgPath)
@@ -1185,6 +1187,7 @@ async function compositeWithComplexFilter(
         '-movflags', '+faststart',
         `-t`, `${Math.max(1, totalDuration)}`,
         ...(process.env.NO_SHORTEST === '1' ? [] : ['-shortest']),
+        ...audioGainOpts,
         '-loglevel', 'debug'
       ])
       .on('start', (cmd: any) => {
@@ -1214,6 +1217,8 @@ async function compositeWithSimpleMapping(
   videoId: string
 ): Promise<void> {
   const { bgPath, overlayPath, outputPath, storyAudioPath, totalDuration } = params;
+  const gain = Number(process.env.AUDIO_GAIN_DB || '0');
+  const audioGainOpts = Number.isFinite(gain) && gain !== 0 ? ['-filter:a', `volume=${gain}dB`] : [];
   await new Promise<void>((resolve, reject) => {
     console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
     ffmpeg()
@@ -1234,6 +1239,7 @@ async function compositeWithSimpleMapping(
         '-movflags', '+faststart',
         `-t`, `${Math.max(1, totalDuration)}`,
         '-shortest',
+        ...audioGainOpts,
         '-loglevel', 'debug'
       ])
       .on('start', (cmd: any) => {
