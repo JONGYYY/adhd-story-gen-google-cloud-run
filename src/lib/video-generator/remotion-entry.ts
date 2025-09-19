@@ -240,13 +240,34 @@ async function transcodeToWav(srcPath: string, dstPath: string): Promise<string>
   });
 }
 
+async function analyzeVolumeDb(audioPath: string): Promise<{ mean: number; max: number }> {
+  return await new Promise((resolve) => {
+    const chunks: string[] = [];
+    ffmpeg()
+      .input(audioPath)
+      .outputOptions(['-af', 'volumedetect', '-f', 'null'])
+      .on('stderr', (line: any) => {
+        if (typeof line === 'string') chunks.push(line);
+      })
+      .on('end', () => {
+        const txt = chunks.join('\n');
+        const meanMatch = txt.match(/mean_volume:\s*([-0-9\.]+)\s*dB/);
+        const maxMatch = txt.match(/max_volume:\s*([-0-9\.]+)\s*dB/);
+        const mean = meanMatch ? Number(meanMatch[1]) : NaN;
+        const max = maxMatch ? Number(maxMatch[1]) : NaN;
+        resolve({ mean, max });
+      })
+      .on('error', () => resolve({ mean: NaN, max: NaN }))
+      .save('-');
+  });
+}
 
 async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     ffmpeg()
       .input(srcPath)
       .outputOptions([
-        '-af', 'dynaudnorm=f=250:g=31:m=5,volume=20dB',
+        '-af', 'dynaudnorm=f=250:g=31:m=5,volume=15dB',
         '-ar', '44100',
         '-ac', '2',
       ])
@@ -256,6 +277,37 @@ async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<s
       .on('end', () => resolve(dstPath))
       .save(dstPath);
   });
+}
+
+async function ensureDecodableAudio(inputPath: string, videoId: string): Promise<string> {
+  // Probe streams
+  let hasAudio = false;
+  await new Promise<void>((resolve) => {
+    ffmpeg(inputPath).ffprobe((err, data) => {
+      if (!err) {
+        hasAudio = (data?.streams || []).some((s: any) => s.codec_type === 'audio');
+      }
+      resolve();
+    });
+  });
+  const stat = await fs.stat(inputPath).catch(() => ({ size: 0 } as any));
+  if (!hasAudio || stat.size < 3000) {
+    console.warn(`[${videoId}] ⚠️ Invalid or tiny audio (${stat.size} bytes). Remuxing to M4A...`);
+    const m4a = path.join(os.tmpdir(), `${videoId}_story_fix.m4a`);
+    await remuxToM4A(inputPath, m4a);
+    inputPath = m4a;
+  }
+  // Transcode to WAV for stable decoding and boosting
+  const wav = path.join(os.tmpdir(), `${videoId}_story.wav`);
+  await transcodeToWav(inputPath, wav);
+  const vol = await analyzeVolumeDb(wav);
+  console.log(`[${videoId}] 🔊 story WAV volume: mean=${vol.mean} dB max=${vol.max} dB`);
+  if (!Number.isFinite(vol.mean) || vol.mean < -50) {
+    const boosted = path.join(os.tmpdir(), `${videoId}_story_boost.wav`);
+    await normalizeAndBoostWav(wav, boosted);
+    return boosted;
+  }
+  return wav;
 }
 
 
@@ -397,6 +449,16 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
           await logAudioProbe('story-remux', storyAudioPath);
         }
       } catch {}
+      // Hard gate: ensure decodable WAV with boosting if needed
+      try {
+        const ensured = await ensureDecodableAudio(storyAudioPath, videoId);
+        if (ensured && ensured !== storyAudioPath) {
+          storyAudioPath = ensured;
+          await logAudioProbe('story-ensured', storyAudioPath);
+        }
+      } catch (e) {
+        console.warn(`[${videoId}] ⚠️ ensureDecodableAudio failed: ${(e as any)?.message || e}`);
+      }
     } catch (e) {
       console.warn(`[${videoId}] ⚠️ TTS failed or timed out; proceeding without tone:`, (e as any)?.message || e);
       const silentTitle = makeSilentWav(Math.max(0.6, Math.min(3, titleDuration)));
@@ -1025,7 +1087,7 @@ async function compositeWithAudioAndTimedOverlay(
   params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
   videoId: string
 ): Promise<void> {
-  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath, measuredStory } = params;
+  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
   
   // Try the complex filter approach first, fallback to simple container mapping
   try {
@@ -1072,7 +1134,7 @@ async function compositeWithComplexFilter(
         '-pix_fmt', 'yuv420p',
         '-movflags', '+faststart',
         `-t`, `${Math.max(1, totalDuration)}`,
-        '-shortest',
+        ...(process.env.NO_SHORTEST === '1' ? [] : ['-shortest']),
         '-loglevel', 'debug'
       ])
       .on('start', (cmd: any) => {
