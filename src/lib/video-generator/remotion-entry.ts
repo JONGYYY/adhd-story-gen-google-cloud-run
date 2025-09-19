@@ -1139,8 +1139,14 @@ async function compositeWithAudioAndTimedOverlay(
 ): Promise<void> {
   const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
   
-  // TEMP: Force simple mapping to debug audio
-  await compositeWithSimpleMapping(params, videoId);
+  // Try the complex filter approach first, fallback to simple container mapping
+  try {
+    await compositeWithComplexFilter(params, videoId);
+    return;
+  } catch (error) {
+    console.warn(`[${videoId}] ⚠️ Complex filter failed, trying simple container mapping: ${(error as any)?.message || error}`);
+    await compositeWithSimpleMapping(params, videoId);
+  }
 }
 
 async function compositeWithComplexFilter(
