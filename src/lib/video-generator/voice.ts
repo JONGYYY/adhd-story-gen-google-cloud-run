@@ -21,7 +21,6 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
   const key = ((globalThis as any)?.process?.env?.AZURE_TTS_KEY || '').trim();
   const region = ((globalThis as any)?.process?.env?.AZURE_TTS_REGION || '').trim();
   if (!key || !region) throw new Error('Missing AZURE_TTS_KEY or AZURE_TTS_REGION');
-  // Simple mapping of our ids/gender to Azure neural voices
   const azureVoice = (() => {
     const fallbackMale = 'en-US-GuyNeural';
     const fallbackFemale = 'en-US-JennyNeural';
@@ -32,19 +31,19 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
     }
     return voice.gender === 'female' ? fallbackFemale : fallbackMale;
   })();
+  const escapeXml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const ssml = `<?xml version="1.0" encoding="UTF-8"?>
-  <speak version="1.0" xml:lang="en-US">
-    <voice name="${azureVoice}">
-      ${text.replace(/&/g,'&amp;')}
-    </voice>
-  </speak>`;
+<speak version="1.0" xml:lang="en-US" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts">
+  <voice name="${azureVoice}">
+    <prosody rate="0%" pitch="0%">${escapeXml(text)}</prosody>
+  </voice>
+</speak>`;
   const url = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: {
       'Ocp-Apim-Subscription-Key': key,
       'Content-Type': 'application/ssml+xml',
-      // WAV PCM for reliability in ffmpeg/Remotion pipelines
       'X-Microsoft-OutputFormat': 'riff-44100hz-16bit-mono-pcm',
       'User-Agent': 'adhd-story-gen/1.0',
     },
@@ -55,8 +54,8 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
     throw new Error(`Azure TTS failed: ${resp.status} ${resp.statusText} ${t}`);
   }
   const buf = await resp.arrayBuffer();
+  console.log(`Azure TTS received: ${buf.byteLength} bytes, content-type=${resp.headers.get('content-type')}, voice=${azureVoice}`);
   if (!buf || buf.byteLength < 1024) throw new Error(`Azure TTS returned too small payload: ${buf?.byteLength || 0} bytes`);
-  console.log(`Azure TTS received: ${buf.byteLength} bytes, voice=${azureVoice}`);
   return buf;
 }
 
@@ -79,7 +78,6 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
   
   try {
     const attemptOnce = async (): Promise<ArrayBuffer> => {
-      // First attempt: streaming endpoint (low-latency) with explicit output format
       const streamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=4&output_format=mp3_44100_128`;
       const response = await fetch(streamUrl, {
         method: 'POST',
@@ -113,7 +111,6 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
         console.warn(`Streaming TTS failed: ${response.status} ${response.statusText} ${errorText}. Falling back.`);
       }
 
-      // Fallback: non-streaming endpoint (more reliable, slightly higher latency)
       const nonStreamUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
       const resp2 = await fetch(nonStreamUrl, {
         method: 'POST',
@@ -166,13 +163,8 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
 
 export async function getAudioDuration(audioBuffer: ArrayBuffer): Promise<number> {
   try {
-    // Convert bytes to seconds based on MP3 bitrate
-    // Assuming 192kbps bitrate (192000 bits per second)
-    // 192000 bits = 24000 bytes per second
     const BYTES_PER_SECOND = 24000;
     const durationInSeconds = audioBuffer.byteLength / BYTES_PER_SECOND;
-    
-    // Add a small buffer to ensure we don't cut off the audio
     return durationInSeconds + 0.5;
   } catch (error) {
     console.error('Error calculating audio duration:', error);
