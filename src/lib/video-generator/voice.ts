@@ -17,7 +17,55 @@ interface TextToSpeechOptions {
   voice: VoiceOption;
 }
 
+async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promise<ArrayBuffer> {
+  const key = ((globalThis as any)?.process?.env?.AZURE_TTS_KEY || '').trim();
+  const region = ((globalThis as any)?.process?.env?.AZURE_TTS_REGION || '').trim();
+  if (!key || !region) throw new Error('Missing AZURE_TTS_KEY or AZURE_TTS_REGION');
+  // Simple mapping of our ids/gender to Azure neural voices
+  const azureVoice = (() => {
+    const fallbackMale = 'en-US-GuyNeural';
+    const fallbackFemale = 'en-US-JennyNeural';
+    if (voice?.id) {
+      const id = voice.id.toLowerCase();
+      if (id === 'adam' || id === 'brian' || voice.gender === 'male') return fallbackMale;
+      if (id === 'sarah' || id === 'laura' || id === 'rachel' || voice.gender === 'female') return fallbackFemale;
+    }
+    return voice.gender === 'female' ? fallbackFemale : fallbackMale;
+  })();
+  const ssml = `<?xml version="1.0" encoding="UTF-8"?>
+  <speak version="1.0" xml:lang="en-US">
+    <voice name="${azureVoice}">
+      ${text.replace(/&/g,'&amp;')}
+    </voice>
+  </speak>`;
+  const url = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Content-Type': 'application/ssml+xml',
+      // WAV PCM for reliability in ffmpeg/Remotion pipelines
+      'X-Microsoft-OutputFormat': 'riff-44100hz-16bit-mono-pcm',
+      'User-Agent': 'adhd-story-gen/1.0',
+    },
+    body: ssml,
+  } as any);
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => '');
+    throw new Error(`Azure TTS failed: ${resp.status} ${resp.statusText} ${t}`);
+  }
+  const buf = await resp.arrayBuffer();
+  if (!buf || buf.byteLength < 1024) throw new Error(`Azure TTS returned too small payload: ${buf?.byteLength || 0} bytes`);
+  console.log(`Azure TTS received: ${buf.byteLength} bytes, voice=${azureVoice}`);
+  return buf;
+}
+
 export async function generateSpeech({ text, voice }: TextToSpeechOptions): Promise<ArrayBuffer> {
+  const provider = ((globalThis as any)?.process?.env?.TTS_PROVIDER || 'elevenlabs').toLowerCase();
+  if (provider === 'azure') {
+    return generateSpeechAzure({ text, voice });
+  }
+
   const voiceId = VOICE_IDS[voice.id];
   if (!voiceId) {
     throw new Error(`Invalid voice ID: ${voice.id}`);

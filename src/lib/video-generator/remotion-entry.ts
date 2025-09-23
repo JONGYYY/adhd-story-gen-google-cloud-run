@@ -428,31 +428,35 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     try {
       const titleBuf = await withTimeout(generateSpeech({ text: title, voice }), 20000) as ArrayBuffer;
       const storyBuf = await withTimeout(generateSpeech({ text: fullStory || title, voice }), 30000) as ArrayBuffer;
-      const titleMp3 = path.join(os.tmpdir(), `${videoId}_title.mp3`);
-      const storyMp3 = path.join(os.tmpdir(), `${videoId}_story.mp3`);
-      await fs.writeFile(titleMp3, Buffer.from(titleBuf));
-      await fs.writeFile(storyMp3, Buffer.from(storyBuf));
-      // Persist TTS MP3s with stable names for verification
+      const provider = (process.env.TTS_PROVIDER || 'elevenlabs').toLowerCase();
+      const titleNode = Buffer.from(titleBuf);
+      const storyNode = Buffer.from(storyBuf);
+      const titleIsWav = titleNode.slice(0, 4).toString('ascii') === 'RIFF';
+      const storyIsWav = storyNode.slice(0, 4).toString('ascii') === 'RIFF';
+      const titleRaw = path.join(os.tmpdir(), `${videoId}_title.${titleIsWav ? 'wav' : 'mp3'}`);
+      const storyRaw = path.join(os.tmpdir(), `${videoId}_story.${storyIsWav ? 'wav' : 'mp3'}`);
+      await fs.writeFile(titleRaw, titleNode);
+      await fs.writeFile(storyRaw, storyNode);
+      // Persist TTS artifacts with correct extension for verification
       try {
-        const ttsCopy = path.join(os.tmpdir(), `tts_${videoId}.mp3`);
-        await fs.copyFile(storyMp3, ttsCopy);
-        console.log(`[${videoId}] 🔗 TTS MP3 available at /api/videos/${path.basename(ttsCopy)}`);
+        const ttsCopy = path.join(os.tmpdir(), `tts_${videoId}.${storyIsWav ? 'wav' : 'mp3'}`);
+        await fs.copyFile(storyRaw, ttsCopy);
+        console.log(`[${videoId}] 🔗 TTS artifact available at /api/videos/${path.basename(ttsCopy)} (provider=${provider}, wav=${storyIsWav})`);
       } catch {}
-      // Force transcode to WAV (44.1kHz stereo) to ensure reliable decoding across players
-      // Prefer using ElevenLabs MP3 directly to avoid any transcode artifacts
-      const stTitle = await fs.stat(titleMp3).catch(() => ({ size: 0 } as any));
-      const stStory = await fs.stat(storyMp3).catch(() => ({ size: 0 } as any));
-      console.log(`[${videoId}] 📦 TTS bytes: title=${stTitle.size} story=${stStory.size}`);
-      titleAudioPath = titleMp3;
-      storyAudioPath = storyMp3;
+      const stTitle = await fs.stat(titleRaw).catch(() => ({ size: 0 } as any));
+      const stStory = await fs.stat(storyRaw).catch(() => ({ size: 0 } as any));
+      console.log(`[${videoId}] 📦 TTS bytes: title=${stTitle.size} story=${stStory.size} (provider=${provider})`);
+      // Set initial audio paths to the raw files
+      titleAudioPath = titleRaw;
+      storyAudioPath = storyRaw;
       // Validate story duration; if zero or too short, try M4A remux before any tone
       try {
-        const dmp3 = await getAudioDurationSeconds(storyAudioPath);
-        console.log(`[${videoId}] 🧪 MP3 story duration: ${dmp3.toFixed(2)}s`);
-        if (!Number.isFinite(dmp3) || dmp3 <= 0.05 || stStory.size < 2000) {
+        const d0 = await getAudioDurationSeconds(storyAudioPath);
+        console.log(`[${videoId}] 🧪 Raw story duration: ${d0.toFixed(2)}s (ext=${path.extname(storyAudioPath)})`);
+        if (!Number.isFinite(d0) || d0 <= 0.05 || stStory.size < 2000) {
           const m4a = path.join(os.tmpdir(), `${videoId}_story_alt.m4a`);
           try {
-            await remuxToM4A(storyMp3, m4a);
+            await remuxToM4A(storyAudioPath, m4a);
             const d2 = await getAudioDurationSeconds(m4a);
             console.log(`[${videoId}] 🧪 Remuxed M4A duration: ${d2.toFixed(2)}s`);
             if (Number.isFinite(d2) && d2 > 0.2) {
@@ -462,11 +466,11 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
               console.warn(`[${videoId}] ⚠️ Remuxed M4A still too short (${d2}); using silent audio (no tone).`);
             }
           } catch (e2) {
-            console.warn(`[${videoId}] ⚠️ TTS MP3 invalid and M4A remux failed: ${(e2 as any)?.message || e2}. Using silent audio.`);
+            console.warn(`[${videoId}] ⚠️ TTS raw audio invalid and M4A remux failed: ${(e2 as any)?.message || e2}. Using silent audio.`);
           }
         }
       } catch (eDur) {
-        console.warn(`[${videoId}] ⚠️ Failed to measure MP3 duration: ${(eDur as any)?.message || eDur}`);
+        console.warn(`[${videoId}] ⚠️ Failed to measure raw audio duration: ${(eDur as any)?.message || eDur}`);
       }
       await logAudioProbe('title', titleAudioPath);
       await logAudioProbe('story', storyAudioPath);
@@ -539,17 +543,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
     try { measuredStory = await getAudioDurationSeconds(storyAudioPath); } catch {}
     // If WAV seems empty, try measuring and using the original MP3 as fallback
-    if (measuredStory < 0.2) {
-      const mp3Fallback = path.join(os.tmpdir(), `${videoId}_story.mp3`);
-      try {
-        const dmp3 = await getAudioDurationSeconds(mp3Fallback);
-        if (dmp3 > measuredStory) {
-          console.warn(`[${videoId}] ⚠️ WAV story duration ${measuredStory.toFixed(2)}s appears empty; falling back to MP3 (${dmp3.toFixed(2)}s)`);
-          storyAudioPath = mp3Fallback;
-          measuredStory = dmp3;
-        }
-      } catch {}
-    }
+    // No MP3-specific fallback; rely on ensured/remuxed path
     // If still effectively silent, synthesize a quiet-but-audible tone as last-resort fallback
     if (measuredStory < 0.2) {
       const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
