@@ -553,6 +553,16 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       storyAudioPath = tonePath;
       console.warn(`[${videoId}] ⚠️ Story audio missing; using generated tone fallback (${measuredStory.toFixed(2)}s)`);
     }
+    // Export ensured story audio for debugging and verification
+    try {
+      const ensuredDebugName = `ensured_story_${videoId}${path.extname(storyAudioPath) || '.wav'}`;
+      const ensuredDebugPath = path.join(os.tmpdir(), ensuredDebugName);
+      if (ensuredDebugPath !== storyAudioPath) {
+        await fs.copyFile(storyAudioPath, ensuredDebugPath);
+      }
+      console.log(`[${videoId}] 🧩 Ensured story audio exported: /api/videos/${ensuredDebugName}`);
+    } catch {}
+
     // Log final audio paths and durations
     console.log(`[${videoId}] 🔉 Using audio: title=${titleAudioPath}, story=${storyAudioPath}, durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
     try {
