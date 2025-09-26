@@ -21,7 +21,8 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
   const key = ((globalThis as any)?.process?.env?.AZURE_TTS_KEY || '').trim();
   const region = ((globalThis as any)?.process?.env?.AZURE_TTS_REGION || '').trim();
   if (!key || !region) throw new Error('Missing AZURE_TTS_KEY or AZURE_TTS_REGION');
-  const azureVoice = (() => {
+  const forcedName = ((globalThis as any)?.process?.env?.AZURE_VOICE_NAME || '').trim();
+  const azureVoice = forcedName || (() => {
     const fallbackMale = 'en-US-GuyNeural';
     const fallbackFemale = 'en-US-JennyNeural';
     if (voice?.id) {
