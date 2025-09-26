@@ -18,6 +18,10 @@ function getContentType(filename: string): string {
       return 'video/mp4';
     case '.mp3':
       return 'audio/mpeg';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.wav':
+      return 'audio/wav';
     case '.html':
       return 'text/html; charset=utf-8';
     case '.srt':

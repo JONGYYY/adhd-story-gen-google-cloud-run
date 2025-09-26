@@ -267,7 +267,13 @@ async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<s
     ffmpeg()
       .input(srcPath)
       .outputOptions([
-        '-af', 'dynaudnorm=f=250:g=31:m=5,volume=15dB',
+        '-af', [
+          // Normalize to broadcast-ish level, then dynamic normalization and final safety gain
+          'loudnorm=I=-18:TP=-1.5:LRA=11',
+          'dynaudnorm=f=200:g=31:m=7',
+          'compand=attacks=0.3:decays=0.8:points=-80/-80|-30/-10|-10/0',
+          'volume=25dB'
+        ].join(','),
         '-ar', '44100',
         '-ac', '2',
       ])
@@ -312,7 +318,7 @@ async function ensureDecodableAudio(inputPath: string, videoId: string): Promise
     await remuxToM4A(inputPath, m4a);
     inputPath = m4a;
   }
-  // Transcode to WAV for stable decoding and boosting
+  // Transcode to WAV for stable decoding
   const wav = path.join(os.tmpdir(), `${videoId}_story.wav`);
   await transcodeToWav(inputPath, wav);
   // Detect absolute silence quickly
@@ -331,14 +337,27 @@ async function ensureDecodableAudio(inputPath: string, videoId: string): Promise
     console.warn(`[${videoId}] ⚠️ WAV detected silent; replacing with generated tone.`);
     return tonePath;
   }
-  const vol = await analyzeVolumeDb(wav);
-  console.log(`[${videoId}] 🔊 story WAV volume: mean=${vol.mean} dB max=${vol.max} dB`);
-  if (!Number.isFinite(vol.mean) || vol.mean < -50) {
-    const boosted = path.join(os.tmpdir(), `${videoId}_story_boost.wav`);
-    await normalizeAndBoostWav(wav, boosted);
-    return boosted;
+  // Always normalize/boost Azure/unknown levels aggressively
+  const boosted = path.join(os.tmpdir(), `${videoId}_story_boost.wav`);
+  await normalizeAndBoostWav(wav, boosted);
+  const vol = await analyzeVolumeDb(boosted);
+  console.log(`[${videoId}] 🔊 boosted WAV volume: mean=${vol.mean} dB max=${vol.max} dB`);
+  // If still very low, apply an extra gain
+  if (!Number.isFinite(vol.mean) || vol.mean < -35) {
+    const boosted2 = path.join(os.tmpdir(), `${videoId}_story_boost2.wav`);
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg()
+        .input(boosted)
+        .outputOptions(['-af', 'volume=20dB', '-ar', '44100', '-ac', '2'])
+        .audioCodec('pcm_s16le')
+        .format('wav')
+        .on('error', reject)
+        .on('end', () => resolve())
+        .save(boosted2);
+    });
+    return boosted2;
   }
-  return wav;
+  return boosted;
 }
 
 
