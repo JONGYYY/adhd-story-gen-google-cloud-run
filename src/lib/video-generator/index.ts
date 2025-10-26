@@ -8,8 +8,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-// Use the new hybrid generator (pluggable engines)
-import { generateVideo as generateHybridVideo } from './new-hybrid-generator';
+// import { generateVideo as generateHybridVideo } from './new-hybrid-generator'; // disabled: force Remotion
 import { generateVideoWithRemotion } from './remotion-entry';
 
 const execAsync = promisify(exec);
@@ -29,8 +28,8 @@ function splitIntoSegments(text: string): string[] {
     .filter(segment => segment.length > 0);
 }
 
-export { generateVideo as generateMoviePyVideo } from './moviepy-generator';
-export { generateVideo as generateHybridVideoLegacy } from './hybrid-generator';
+// export { generateVideo as generateMoviePyVideo } from './moviepy-generator'; // disabled: force Remotion
+// export { generateVideo as generateHybridVideoLegacy } from './hybrid-generator'; // disabled: force Remotion
 
 export async function generateVideo(options: VideoOptions, videoId: string): Promise<string> {
   // Generate or use custom story
@@ -55,13 +54,7 @@ export async function generateVideo(options: VideoOptions, videoId: string): Pro
     story,
   };
 
-  // Feature flag: prefer Remotion pipeline when enabled
-  if ((process.env.REMOTION_ENABLED || '').toLowerCase() === 'true') {
-    console.log(`[gen ${videoId}] REMOTION_ENABLED=true -> using Remotion pipeline`);
-    return await generateVideoWithRemotion(generationOptions as any, videoId);
-  }
-
-  // Use the new hybrid generator with MoviePy engine and fallbacks
-  console.log(`[gen ${videoId}] REMOTION_ENABLED!=true -> using Hybrid(MoviePy) pipeline`);
-  return generateHybridVideo(generationOptions as any, videoId);
+  // Force Remotion pipeline only (no MoviePy / hybrid fallback)
+  console.log(`[gen ${videoId}] Forcing Remotion pipeline`);
+  return await generateVideoWithRemotion(generationOptions as any, videoId);
 } 
