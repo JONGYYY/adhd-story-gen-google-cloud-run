@@ -17,6 +17,23 @@ interface TextToSpeechOptions {
   voice: VoiceOption;
 }
 
+function bufferLooksSilentWav(buf: ArrayBuffer): boolean {
+  try {
+    const BufferCtor: any = (globalThis as any).Buffer;
+    const b = BufferCtor.from(buf as any);
+    if (b.length < 100) return true;
+    if (b.slice(0, 4).toString('ascii') !== 'RIFF') return false;
+    const data = b.subarray(44);
+    const limit = Math.min(data.length, 10000);
+    for (let i = 0; i < limit; i++) {
+      if (data[i] !== 0) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promise<ArrayBuffer> {
   const key = ((globalThis as any)?.process?.env?.AZURE_TTS_KEY || '').trim();
   const region = ((globalThis as any)?.process?.env?.AZURE_TTS_REGION || '').trim();
@@ -33,31 +50,77 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
     return voice.gender === 'female' ? fallbackFemale : fallbackMale;
   })();
   const escapeXml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const ssml = `<?xml version="1.0" encoding="UTF-8"?>
-<speak version="1.0" xml:lang="en-US" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts">
-  <voice name="${azureVoice}">
-    <prosody rate="0%" pitch="0%">${escapeXml(text)}</prosody>
-  </voice>
-</speak>`;
-  const url = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
-  const resp = await fetch(url, {
+  const ssml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<speak version=\"1.0\" xml:lang=\"en-US\" xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"http://www.w3.org/2001/mstts\">\n  <voice name=\"${azureVoice}\">\n    <prosody rate=\"0%\" pitch=\"0%\">${escapeXml(text)}</prosody>\n  </voice>\n</speak>`;
+  const baseUrl = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+  const resp1 = await fetch(baseUrl, {
     method: 'POST',
     headers: {
       'Ocp-Apim-Subscription-Key': key,
+      'Ocp-Apim-Subscription-Region': region,
       'Content-Type': 'application/ssml+xml',
       'X-Microsoft-OutputFormat': 'riff-44100hz-16bit-mono-pcm',
       'User-Agent': 'adhd-story-gen/1.0',
     },
     body: ssml,
   } as any);
-  if (!resp.ok) {
-    const t = await resp.text().catch(() => '');
-    throw new Error(`Azure TTS failed: ${resp.status} ${resp.statusText} ${t}`);
+  if (resp1.ok) {
+    const buf1 = await resp1.arrayBuffer();
+    console.log(`Azure TTS (SSML) bytes=${buf1.byteLength} ct=${resp1.headers.get('content-type')} voice=${azureVoice}`);
+    if (buf1.byteLength > 4096 && !bufferLooksSilentWav(buf1)) {
+      return buf1;
+    }
+    console.warn(`Azure TTS SSML returned tiny or silent WAV (${buf1.byteLength} bytes). Trying fallback...`);
+  } else {
+    const t = await resp1.text().catch(() => '');
+    console.warn(`Azure TTS SSML failed: ${resp1.status} ${resp1.statusText} ${t}`);
   }
-  const buf = await resp.arrayBuffer();
-  console.log(`Azure TTS received: ${buf.byteLength} bytes, content-type=${resp.headers.get('content-type')}, voice=${azureVoice}`);
-  if (!buf || buf.byteLength < 1024) throw new Error(`Azure TTS returned too small payload: ${buf?.byteLength || 0} bytes`);
-  return buf;
+
+  const resp2 = await fetch(baseUrl, {
+    method: 'POST',
+    headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Ocp-Apim-Subscription-Region': region,
+      'Content-Type': 'text/plain',
+      'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+      'Synthesis-VoiceName': azureVoice,
+      'User-Agent': 'adhd-story-gen/1.0',
+    },
+    body: text,
+  } as any);
+  if (resp2.ok) {
+    const buf2 = await resp2.arrayBuffer();
+    console.log(`Azure TTS (plain/mp3) bytes=${buf2.byteLength} ct=${resp2.headers.get('content-type')} voice=${azureVoice}`);
+    if (buf2.byteLength > 4096) return buf2;
+    console.warn(`Azure TTS plain returned tiny payload (${buf2.byteLength} bytes). Trying alt WAV...`);
+  } else {
+    const t = await resp2.text().catch(() => '');
+    console.warn(`Azure TTS plain failed: ${resp2.status} ${resp2.statusText} ${t}`);
+  }
+
+  const resp3 = await fetch(baseUrl, {
+    method: 'POST',
+    headers: {
+      'Ocp-Apim-Subscription-Key': key,
+      'Ocp-Apim-Subscription-Region': region,
+      'Content-Type': 'text/plain',
+      'X-Microsoft-OutputFormat': 'riff-24000hz-16bit-mono-pcm',
+      'Synthesis-VoiceName': azureVoice,
+      'User-Agent': 'adhd-story-gen/1.0',
+    },
+    body: text,
+  } as any);
+  if (resp3.ok) {
+    const buf3 = await resp3.arrayBuffer();
+    console.log(`Azure TTS (plain/wav24k) bytes=${buf3.byteLength} ct=${resp3.headers.get('content-type')} voice=${azureVoice}`);
+    if (buf3.byteLength > 4096 && !bufferLooksSilentWav(buf3)) return buf3;
+    console.warn(`Azure TTS alt WAV still tiny/silent (${buf3.byteLength} bytes).`);
+  } else {
+    const t = await resp3.text().catch(() => '');
+    console.warn(`Azure TTS alt WAV failed: ${resp3.status} ${resp3.statusText} ${t}`);
+  }
+
+  throw new Error('Azure TTS returned no usable audio after fallbacks');
 }
 
 export async function generateSpeech({ text, voice }: TextToSpeechOptions): Promise<ArrayBuffer> {

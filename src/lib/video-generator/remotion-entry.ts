@@ -355,6 +355,25 @@ async function ensureDecodableAudio(inputPath: string, videoId: string): Promise
         .on('end', () => resolve())
         .save(boosted2);
     });
+    // Re-check loudness after extra gain
+    const vol2 = await analyzeVolumeDb(boosted2);
+    console.log(`[${videoId}] 🔊 boosted2 WAV volume: mean=${vol2.mean} dB max=${vol2.max} dB`);
+    // If STILL effectively silent, replace with tone to guarantee audible output
+    if (!Number.isFinite(vol2.mean) || vol2.mean < -40) {
+      const estDur = Math.max(3, 10);
+      const tonePath = path.join(os.tmpdir(), `${videoId}_story_tone.wav`);
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(`sine=frequency=880:sample_rate=22050:duration=${estDur}`)
+          .inputOptions(['-f', 'lavfi'])
+          .outputOptions(['-f', 'wav', '-ac', '1', '-ar', '22050'])
+          .on('error', reject)
+          .on('end', () => resolve())
+          .save(tonePath);
+      });
+      console.warn(`[${videoId}] ⚠️ Audio remained too quiet after boosting; using tone fallback.`);
+      return tonePath;
+    }
     return boosted2;
   }
   return boosted;

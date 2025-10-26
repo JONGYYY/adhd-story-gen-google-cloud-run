@@ -42,9 +42,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If the path is for non-authenticated users and user is logged in
-  if (authPaths.some(p => path.startsWith(p)) && isLoggedIn) {
-    return NextResponse.redirect(new URL('/create', request.url));
+  // Allow access to auth pages even if a stale session cookie exists.
+  // The client will redirect post-login once the session is actually established.
+  if (authPaths.some(p => path.startsWith(p))) {
+    return NextResponse.next();
   }
 
   // Handle video files
