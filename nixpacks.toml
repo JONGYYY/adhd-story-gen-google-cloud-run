@@ -1,0 +1,21 @@
+[phases.setup]
+nixpkgs = [
+  "ffmpeg",
+  "fontconfig",
+  "libasound",
+  "gtk3",
+  "nss",
+  "nspr",
+  "pango",
+  "cairo",
+  "glib",
+  "xdg-utils"
+]
+
+[variables]
+FFMPEG_BINARY = "ffmpeg"
+FFPROBE_BINARY = "ffprobe"
+NODE_ENV = "production"
+
+[start]
+cmd = "npm start"
