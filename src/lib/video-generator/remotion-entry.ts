@@ -11,6 +11,10 @@ import { createCanvas, loadImage, Canvas, GlobalFonts } from '@napi-rs/canvas';
 import ffmpeg from 'fluent-ffmpeg';
 import { generateSpeech } from './voice';
 
+// [MOD] Prefer environment-provided ffmpeg paths if present (Railway/Docker)
+if (process.env.FFMPEG_BINARY) ffmpeg.setFfmpegPath(process.env.FFMPEG_BINARY);
+if (process.env.FFPROBE_BINARY) ffmpeg.setFfprobePath(process.env.FFPROBE_BINARY);
+
 // Use node-fetch to ensure Node Readable stream body
 async function fetchWithTimeout(url: string, ms: number, signal?: AbortSignal): Promise<any> {
   const controller = new AbortController();
@@ -137,10 +141,8 @@ async function resolveBackgroundLocalPath(category: string, videoId: string): Pr
         prefix = s3Match[3];
       }
     } else {
-      // BACKGROUND_BASE_URL provided separately from bucket via env
       try {
         const u = new URL(baseUrl);
-        // everything after host as prefix
         prefix = u.pathname.replace(/^\//, '');
       } catch {
         prefix = '';
@@ -268,7 +270,6 @@ async function normalizeAndBoostWav(srcPath: string, dstPath: string): Promise<s
       .input(srcPath)
       .outputOptions([
         '-af', [
-          // Normalize to broadcast-ish level, then dynamic normalization and final safety gain
           'loudnorm=I=-18:TP=-1.5:LRA=11',
           'dynaudnorm=f=200:g=31:m=7',
           'compand=attacks=0.3:decays=0.8:points=-80/-80|-30/-10|-10/0',
@@ -379,7 +380,6 @@ async function ensureDecodableAudio(inputPath: string, videoId: string): Promise
   return boosted;
 }
 
-
 // Removed byte-level silence check; rely on measured duration instead
 
 async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
@@ -392,7 +392,6 @@ async function remuxToM4A(srcPath: string, dstPath: string): Promise<string> {
       .save(dstPath);
   });
 }
-
 
 async function logAudioProbe(tag: string, audioPath: string): Promise<void> {
   await new Promise<void>((resolve) => {
@@ -416,6 +415,16 @@ async function logAudioProbe(tag: string, audioPath: string): Promise<void> {
   });
 }
 
+// [MOD] tiny helper for ffprobe-based duration (used throughout)
+async function getAudioDurationSeconds(audioPath: string): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    ffmpeg(audioPath).ffprobe((err, data) => {
+      if (err) return reject(err);
+      const d = Number(data?.format?.duration || 0);
+      resolve(d > 0 ? d : 0);
+    });
+  });
+}
 
 export async function generateVideoWithRemotion(options: VideoGenerationOptions, videoId: string): Promise<string> {
   const category = options.background?.category || 'minecraft';
@@ -441,7 +450,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     const topBannerPath = await resolveBannerAsset('redditbannertop.png', videoId);
     const bottomBannerPath = await resolveBannerAsset('redditbannerbottom.png', videoId);
 
-    // TTS for title + story using ElevenLabs util with timeout and silent fallback to avoid hangs
+    // TTS for title + story with timeouts and robust fallbacks
     const makeSilentWav = (seconds: number): Buffer => {
       const sampleRate = 22050; const channels = 1; const bits = 16;
       const bytesPerSample = bits/8; const blockAlign = channels*bytesPerSample;
@@ -463,31 +472,40 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     let titleAudioPath = path.join(os.tmpdir(), `${videoId}_title.wav`);
     let storyAudioPath = path.join(os.tmpdir(), `${videoId}_story.wav`);
     let titleDuration = Math.max(1.2, Math.min(6, title.length * 0.06));
+
     try {
       const titleBuf = await withTimeout(generateSpeech({ text: title, voice }), 20000) as ArrayBuffer;
       const storyBuf = await withTimeout(generateSpeech({ text: fullStory || title, voice }), 30000) as ArrayBuffer;
+
       const provider = (process.env.TTS_PROVIDER || 'elevenlabs').toLowerCase();
       const titleNode = Buffer.from(titleBuf);
       const storyNode = Buffer.from(storyBuf);
+
       const titleIsWav = titleNode.slice(0, 4).toString('ascii') === 'RIFF';
       const storyIsWav = storyNode.slice(0, 4).toString('ascii') === 'RIFF';
+
       const titleRaw = path.join(os.tmpdir(), `${videoId}_title.${titleIsWav ? 'wav' : 'mp3'}`);
       const storyRaw = path.join(os.tmpdir(), `${videoId}_story.${storyIsWav ? 'wav' : 'mp3'}`);
+
       await fs.writeFile(titleRaw, titleNode);
       await fs.writeFile(storyRaw, storyNode);
-      // Persist TTS artifacts with correct extension for verification
+
+      // Persist TTS artifacts for debug
       try {
         const ttsCopy = path.join(os.tmpdir(), `tts_${videoId}.${storyIsWav ? 'wav' : 'mp3'}`);
         await fs.copyFile(storyRaw, ttsCopy);
         console.log(`[${videoId}] 🔗 TTS artifact available at /api/videos/${path.basename(ttsCopy)} (provider=${provider}, wav=${storyIsWav})`);
       } catch {}
+
       const stTitle = await fs.stat(titleRaw).catch(() => ({ size: 0 } as any));
       const stStory = await fs.stat(storyRaw).catch(() => ({ size: 0 } as any));
       console.log(`[${videoId}] 📦 TTS bytes: title=${stTitle.size} story=${stStory.size} (provider=${provider})`);
-      // Set initial audio paths to the raw files
+
+      // Init audio paths
       titleAudioPath = titleRaw;
       storyAudioPath = storyRaw;
-      // Validate story duration; if zero or too short, try M4A remux before any tone
+
+      // [MOD] Validate/repair story audio BEFORE any composition
       try {
         const d0 = await getAudioDurationSeconds(storyAudioPath);
         console.log(`[${videoId}] 🧪 Raw story duration: ${d0.toFixed(2)}s (ext=${path.extname(storyAudioPath)})`);
@@ -510,26 +528,18 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       } catch (eDur) {
         console.warn(`[${videoId}] ⚠️ Failed to measure raw audio duration: ${(eDur as any)?.message || eDur}`);
       }
+
       await logAudioProbe('title', titleAudioPath);
       await logAudioProbe('story', storyAudioPath);
-      // If probe shows no audio stream for MP3, remux to AAC (m4a)
-      try {
-        const storyDur = await getAudioDurationSeconds(storyAudioPath);
-        if (!Number.isFinite(storyDur) || storyDur <= 0.01) {
-          const m4a = path.join(os.tmpdir(), `${videoId}_story.m4a`);
-          await remuxToM4A(storyAudioPath, m4a);
-          storyAudioPath = m4a;
-          await logAudioProbe('story-remux', storyAudioPath);
-        }
-      } catch {}
-      // Hard gate: ensure decodable WAV with boosting if needed
+
+      // [MOD] Hard gate: force decodable WAV w/ boost or tone
       try {
         const ensured = await ensureDecodableAudio(storyAudioPath, videoId);
         if (ensured && ensured !== storyAudioPath) {
           storyAudioPath = ensured;
           await logAudioProbe('story-ensured', storyAudioPath);
         }
-        // If still effectively silent by volume, fallback to tone
+        // Loudness failsafe
         try {
           const vol2 = await analyzeVolumeDb(storyAudioPath);
           if (Number.isFinite(vol2.mean) && vol2.mean < -60) {
@@ -559,38 +569,29 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       await fs.writeFile(titleAudioPath, silentTitle);
       await fs.writeFile(storyAudioPath, silentStory);
     }
-    // If audio duration is still 0, synthesize an audible tone to validate mux and ensure sound
-    const ensureAudible = async (pathOut: string, seconds: number) => {
-      try {
-        const dur = await getAudioDurationSeconds(pathOut);
-        if (dur > 0.2) return;
-      } catch {}
+
+    // [MOD] Final duration checks + audible fallback
+    let measuredTitle = 0; let measuredStory = 0;
+    try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
+    try { measuredStory = await getAudioDurationSeconds(storyAudioPath); } catch {}
+
+    if (measuredStory < 0.2) {
+      const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
+      const tonePath = path.join(os.tmpdir(), `${videoId}_story_fallback.wav`);
       await new Promise<void>((resolve, reject) => {
         ffmpeg()
-          .input(`sine=frequency=880:sample_rate=22050:duration=${Math.max(0.5, seconds)}`)
+          .input(`sine=frequency=880:sample_rate=22050:duration=${Math.max(0.5, estStory)}`)
           .inputOptions(['-f', 'lavfi'])
           .outputOptions(['-f', 'wav', '-ac', '1', '-ar', '22050'])
           .on('error', reject)
           .on('end', () => resolve())
-          .save(pathOut);
+          .save(tonePath);
       });
-    };
-    // Do not overwrite TTS audio; rely on debug tone mix in composite for audibility
-    // Measure actual durations and sizes
-    let measuredTitle = 0; let measuredStory = 0;
-    try { measuredTitle = await getAudioDurationSeconds(titleAudioPath); } catch {}
-    try { measuredStory = await getAudioDurationSeconds(storyAudioPath); } catch {}
-    // If WAV seems empty, try measuring and using the original MP3 as fallback
-    // No MP3-specific fallback; rely on ensured/remuxed path
-    // If still effectively silent, synthesize a quiet-but-audible tone as last-resort fallback
-    if (measuredStory < 0.2) {
-      const estStory = Math.max(3, Math.min(22, (fullStory || title).split(/\s+/).length * 0.35));
-      const tonePath = path.join(os.tmpdir(), `${videoId}_story_fallback.wav`);
-      await ensureAudible(tonePath, estStory);
       try { measuredStory = await getAudioDurationSeconds(tonePath); } catch {}
       storyAudioPath = tonePath;
       console.warn(`[${videoId}] ⚠️ Story audio missing; using generated tone fallback (${measuredStory.toFixed(2)}s)`);
     }
+
     // Export ensured story audio for debugging and verification
     try {
       const ensuredDebugName = `ensured_story_${videoId}${path.extname(storyAudioPath) || '.wav'}`;
@@ -601,7 +602,6 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       console.log(`[${videoId}] 🧩 Ensured story audio exported: /api/videos/${ensuredDebugName}`);
     } catch {}
 
-    // Log final audio paths and durations
     console.log(`[${videoId}] 🔉 Using audio: title=${titleAudioPath}, story=${storyAudioPath}, durations: title=${measuredTitle.toFixed(2)}s, story=${measuredStory.toFixed(2)}s`);
     try {
       const stT = await fs.stat(titleAudioPath); const stS = await fs.stat(storyAudioPath);
@@ -633,17 +633,16 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     const captionText = (fullStory || title).replace(/\[BREAK\]/g, ' ');
     await buildCenterWordAss(captionText, storyAudioPath, subsPath, Math.max(0, titleDuration + 0.10));
 
-    // Composite with audio, overlay only during title audio, then remove for captions area
+    // Composite with audio, overlay only during title audio, captions after
     const finalPath = path.join(os.tmpdir(), `output_${videoId}.mp4`);
     console.log(`[${videoId}] 🎬 Starting ffmpeg composite...`);
-    
-    // CRITICAL: Inspect story audio file before composition
+
+    // [MOD] Inspect story audio before composition, force AAC if needed
     let finalStoryAudioPath = storyAudioPath;
     try {
       const storyStats = await fs.stat(storyAudioPath);
       console.log(`[${videoId}] 🔍 Story audio file: ${storyAudioPath}, size: ${storyStats.size} bytes`);
-      
-      // ffprobe the story file to check for audio streams
+
       let hasValidAudioStream = false;
       await new Promise<void>((resolve) => {
         ffmpeg(storyAudioPath).ffprobe((err, data) => {
@@ -660,23 +659,17 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
           resolve();
         });
       });
-      
-      // If no valid audio stream or file is too small, force remux to AAC
+
       if (!hasValidAudioStream || storyStats.size < 2000) {
         console.log(`[${videoId}] ⚠️ Story audio invalid, remuxing to AAC...`);
-        
-        // Log first 64 bytes to verify MP3 header
         try {
           const header = await fs.readFile(storyAudioPath, { encoding: null });
           const hex = header.slice(0, 64).toString('hex').match(/.{2}/g)?.join(' ') || '';
           console.log(`[${videoId}] 🔍 First 64 bytes (hex): ${hex}`);
-          const isMP3 = header[0] === 0x49 && header[1] === 0x44 && header[2] === 0x33; // ID3
-          const isMP3Frame = header[0] === 0xFF && (header[1] & 0xE0) === 0xE0; // MP3 frame sync
-          console.log(`[${videoId}] 🔍 MP3 header check: ID3=${isMP3}, FrameSync=${isMP3Frame}`);
         } catch (e) {
           console.log(`[${videoId}] ❌ Failed to read header: ${(e as any)?.message || e}`);
         }
-        
+
         const aacPath = path.join(os.tmpdir(), `${videoId}_story_forced.m4a`);
         await remuxToM4A(storyAudioPath, aacPath);
         finalStoryAudioPath = aacPath;
@@ -685,7 +678,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     } catch (e) {
       console.error(`[${videoId}] ❌ Failed to inspect story audio: ${(e as any)?.message || e}`);
     }
-    
+
     await updateProgress(videoId, 70);
     await compositeWithAudioAndTimedOverlay({
       bgPath: bgLocalPath,
@@ -698,6 +691,7 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
       subsPath,
       measuredStory,
     }, videoId);
+
     // Probe final mux to confirm audio stream presence
     try { await logAudioProbe('final-video', finalPath); } catch {}
     await updateProgress(videoId, 100);
@@ -710,9 +704,9 @@ export async function generateVideoWithRemotion(options: VideoGenerationOptions,
     try { await setVideoFailed(videoId, e?.message || 'Remotion generation failed'); } catch {}
     throw e;
   }
-} 
+}
 
-// No ffprobe: relying on user-provided 9:16 backgrounds
+// [MOD] Removed an unused/broken compositeOverlay() that referenced out-of-scope vars
 
 async function resolveBannerAsset(filename: string, videoId: string): Promise<string | null> {
   if ((process.env.SKIP_REMOTE_BANNERS || '0') === '1') {
@@ -827,7 +821,6 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   const sidePadding = Math.floor((videoWidth - cardWidth) / 2);
   const innerPad = Math.floor(videoWidth * 0.02);
   const maxTextWidth = cardWidth - innerPad * 2;
-  // Increase both title and author size by 2x from current
   const baseFontSize = Math.floor(cardWidth * (0.112 * 2 / 6 * 2));
   const maxFontPx = Math.floor(cardWidth * (0.130 * 2 / 6 * 2));
 
@@ -841,8 +834,8 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   ctx.font = `bold ${baseFontSize}px ${titleFontFamily}`;
   ctx.fillStyle = 'black';
   ctx.textBaseline = 'top';
-  
-  // Word wrap with target 3 lines max, try to keep big size
+
+  // Word wrap
   const words = title.split(/\s+/);
   const lines: string[] = [];
   let current = '';
@@ -857,10 +850,10 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     }
   }
   if (current) lines.push(current);
-  // Shrink-to-fit loop with target fill ratio and line cap
+
   let fontSize = baseFontSize;
   const maxLines = 3;
-  const targetFill = 0.72; // balanced large text without overflow
+  const targetFill = 0.72;
   const recomputeWrapped = () => {
     const newLines: string[] = [];
     let cur = '';
@@ -886,15 +879,12 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     longest = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
   }
 
-  // No post-fit upscale; keep original sizing for stable appearance
-
   const lineHeight = Math.floor(fontSize * 1.22);
   const textBlockHeight = lines.length * lineHeight;
-  // Reduce white box vertical padding by ~15px overall (7-8px top/bottom)
   const basePaddingY = Math.floor(videoHeight * 0.018);
   const boxPaddingY = Math.max(0, basePaddingY - 8);
   const boxHeight = textBlockHeight + boxPaddingY * 2;
-  // Load banners to compute their scaled heights at card width
+
   let topH = 0, botH = 0;
   let topImg: any = null, botImg: any = null;
   if (topBannerPath) {
@@ -911,7 +901,7 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
       botH = Math.round((botImg as any).height * scale);
     } catch {}
   }
-  // Fallback heights when banner assets are missing so layout/author still render
+
   const FALLBACK_TOP_RATIO = 376 / 1858;
   const FALLBACK_BOTTOM_RATIO = 234 / 1676;
   if (!topImg) {
@@ -920,7 +910,6 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   if (!botImg) {
     botH = Math.round(cardWidth * FALLBACK_BOTTOM_RATIO);
   }
-  // Center the trio (top banner + box + bottom banner) vertically
   const totalH = topH + boxHeight + botH;
   const boxY = Math.max(0, Math.floor((videoHeight - totalH) / 2) + topH);
 
@@ -929,51 +918,49 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
   ctx.globalAlpha = 1;
   ctx.fillRect(sidePadding, boxY, cardWidth, boxHeight);
 
-  // Draw title left-aligned within the card
+  // Draw title
   ctx.fillStyle = 'black';
   ctx.font = `bold ${fontSize}px ${titleFontFamily}`;
   let y = boxY + boxPaddingY + 5;
   for (const line of lines) {
-    const x = sidePadding + innerPad + 15; // shift 10px to the right
+    const x = sidePadding + innerPad + 15;
     ctx.fillText(line, x, y);
     y += lineHeight;
   }
 
-  // Draw author on top banner using ratios (will be placed after banner draw)
-
-  // Helpers to draw rounded images
+  // Draw top banner and author
   const drawRounded = (img: any, x: number, y: number, w: number, h: number, radii: {tl:number; tr:number; br:number; bl:number}) => {
-    ctx.save();
-    ctx.beginPath();
+    const ctxAny: any = ctx;
+    ctxAny.save();
+    ctxAny.beginPath();
     const r = radii;
-    ctx.moveTo(x + r.tl, y);
-    ctx.lineTo(x + w - r.tr, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
-    ctx.lineTo(x + w, y + h - r.br);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
-    ctx.lineTo(x + r.bl, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
-    ctx.lineTo(x, y + r.tl);
-    ctx.quadraticCurveTo(x, y, x + r.tl, y);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(img as any, x, y, w, h);
-    ctx.restore();
+    ctxAny.moveTo(x + r.tl, y);
+    ctxAny.lineTo(x + w - r.tr, y);
+    ctxAny.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+    ctxAny.lineTo(x + w, y + h - r.br);
+    ctxAny.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+    ctxAny.lineTo(x + r.bl, y + h);
+    ctxAny.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+    ctxAny.lineTo(x, y + r.tl);
+    ctxAny.quadraticCurveTo(x, y, x + r.tl, y);
+    ctxAny.closePath();
+    ctxAny.clip();
+    ctxAny.drawImage(img as any, x, y, w, h);
+    ctxAny.restore();
   };
   const cornerRadius = Math.floor(cardWidth * 0.03);
-  // Draw top banner bottom-flush with the white box, rounded top corners (with fallback)
   {
     const drawW = cardWidth;
-    const drawH = topH; // use computed top height (fallback if no image)
+    const drawH = topH;
     const drawX = sidePadding;
     const drawY = boxY - drawH;
     if (topImg) {
       drawRounded(topImg, drawX, drawY, drawW, drawH, { tl: cornerRadius, tr: cornerRadius, br: 0, bl: 0 });
     } else {
-      // Fallback: solid Reddit orange bar
+      // Fallback bar
       ctx.save();
-      ctx.beginPath();
       const r = { tl: cornerRadius, tr: cornerRadius, br: 0, bl: 0 };
+      ctx.beginPath();
       ctx.moveTo(drawX + r.tl, drawY);
       ctx.lineTo(drawX + drawW - r.tr, drawY);
       ctx.quadraticCurveTo(drawX + drawW, drawY, drawX + drawW, drawY + r.tr);
@@ -989,21 +976,21 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
       ctx.restore();
     }
 
-    // Author text on top banner
+    // Author
     const refW = 1858;
     const refH = 376;
     const usernameXRatio = 388 / refW;
     const usernameYRatio = 130 / refH;
-    const ux = drawX + Math.round(drawW * usernameXRatio) + 5 - 3; // nudge 3px left
-    const uy = drawY + Math.round(drawH * usernameYRatio) + 20; // lower by additional 10px
-    // Make author the same size as title
+    const ux = drawX + Math.round(drawW * usernameXRatio) + 2;
+    const uy = drawY + Math.round(drawH * usernameYRatio) + 20;
     const authorPx = Math.max(18, Math.floor(fontSize));
     ctx.font = `600 ${authorPx}px ${authorFontFamily}`;
     ctx.fillStyle = 'black';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(`u/${author}`, ux, uy);
   }
-  // Draw bottom banner top-flush with the white box, rounded bottom corners
+
+  // Bottom banner
   if (botImg) {
     const scale = cardWidth / (botImg as any).width;
     const drawW = cardWidth;
@@ -1011,14 +998,13 @@ async function createBannerOverlay(params: OverlayParams): Promise<void> {
     drawRounded(botImg, sidePadding, boxY + boxHeight, drawW, drawH, { tl: 0, tr: 0, br: cornerRadius, bl: cornerRadius });
   }
 
-  // Optional debug: draw tiny text with measured durations near bottom-left
+  // Optional debug
   if (debugText) {
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
     ctx.font = `bold ${Math.max(14, Math.floor(videoWidth * 0.018))}px ${titleFontFamily}`;
     ctx.fillText(debugText, sidePadding, Math.min(videoHeight - 20, boxY + boxHeight + 40));
   }
 
-  // Save overlay image
   const png = (canvas as any).toBuffer('image/png');
   await fs.writeFile(outputPath, png);
 }
@@ -1091,65 +1077,15 @@ async function resolveFontAsset(filename: string): Promise<string | null> {
   }
   // Local public fallback
   const localPublic = path.join(process.cwd(), 'public', 'fonts', filename);
-  try { await fs.access(localPublic); return localPublic; } catch {}
+  try {
+    await fs.access(localPublic);
+    return localPublic;
+  } catch {}
   // System fallback to DejaVu Serif Bold (Debian-based)
   const systemDeja = '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf';
   try { await fs.access(systemDeja); return systemDeja; } catch {}
   return null;
 }
-
-async function compositeOverlay(bgPath: string, overlayPath: string, outputPath: string, videoId: string): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg()
-      .input(bgPath)
-      .input(overlayPath)
-      .input(storyAudioPath)
-      .complexFilter([
-        { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
-        { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
-        { filter: 'fade', options: `t=out:st=${titleDuration - 0.1}:d=0.1:alpha=1`, inputs: 'olrgba', outputs: 'olfade' },
-        { filter: 'overlay', options: 'x=0:y=0:format=auto', inputs: ['v0', 'olfade'], outputs: 'vout' },
-        { filter: 'anull', inputs: '2:a', outputs: 'a0' },
-        { filter: 'anull', inputs: '3:a', outputs: 'a1' },
-        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a0', 'a1'], outputs: 'aout' }
-      ])
-      .outputOptions([
-        '-map', '[vout]',
-        '-map', '[aout]',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-ac', '2',
-        '-ar', '44100',
-        '-b:a', '192k',
-        '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart'
-      ])
-      .on('start', (cmd: any) => {
-        console.log(`[${videoId}] ▶️ ffmpeg command: ${cmd}`);
-      })
-      .on('progress', async (p: any) => {
-        try { await updateProgress(videoId, Math.min(95, 70 + Math.floor((p.percent || 0) / 3))); } catch {}
-      })
-      .on('error', reject)
-      .on('end', () => resolve())
-      .save(outputPath);
-  });
-}
-
-
-// ffprobe duration helper
-async function getAudioDurationSeconds(audioPath: string): Promise<number> {
-  return await new Promise<number>((resolve, reject) => {
-    ffmpeg(audioPath).ffprobe((err, data) => {
-      if (err) return reject(err);
-      const d = Number(data?.format?.duration || 0);
-      resolve(d > 0 ? d : 0);
-    });
-  });
-}
-
 
 // Build center one-word ASS subtitles aligned to audio length, with optional start offset
 async function buildCenterWordAss(text: string, audioPath: string, outAssPath: string, startOffsetSec = 0): Promise<void> {
@@ -1158,8 +1094,19 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
   try { total = await getAudioDurationSeconds(audioPath); } catch { total = Math.max(3, words.length * 0.35); }
   const per = Math.max(0.18, total / Math.max(1, words.length));
 
-  // alignment=2 => center; MarginV positions vertically. Use ~960/2 to center baseline closely.
-  const header = `[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,88,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,10,10,960,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+  const header = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,88,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,10,10,960,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
   const toTime = (s: number) => {
     const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = Math.floor(s % 60); const cs = Math.floor((s % 1) * 100);
     return `${String(h).padStart(1,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
@@ -1174,14 +1121,11 @@ async function buildCenterWordAss(text: string, audioPath: string, outAssPath: s
   await fs.writeFile(outAssPath, header + lines);
 }
 
-// New: composite background with timed overlay and concatenated title+story audio
+// New: composite background with timed overlay and mapped story audio
 async function compositeWithAudioAndTimedOverlay(
   params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
   videoId: string
 ): Promise<void> {
-  const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
-  
-  // Try the complex filter approach first, fallback to simple container mapping
   try {
     await compositeWithComplexFilter(params, videoId);
     return;
@@ -1198,26 +1142,30 @@ async function compositeWithComplexFilter(
   const { bgPath, overlayPath, outputPath, titleAudioPath, storyAudioPath, titleDuration, totalDuration, subsPath } = params;
   const gain = Number(process.env.AUDIO_GAIN_DB || '0');
   const audioGainOpts = Number.isFinite(gain) && gain !== 0 ? ['-filter:a', `volume=${gain}dB`] : [];
+
   await new Promise<void>((resolve, reject) => {
     ffmpeg()
-      .input(bgPath)
-      .input(overlayPath)
-      .input(titleAudioPath)
-      .input(storyAudioPath)
+      .input(bgPath)          // 0
+      .input(overlayPath)     // 1
+      .input(titleAudioPath)  // 2
+      .input(storyAudioPath)  // 3
       .complexFilter([
-        // scale overlay to match video and fade it out at titleDuration
+        // scale overlay to match video and hide after title duration
         { filter: 'scale2ref', options: 'w=iw:h=ih', inputs: '[1][0]', outputs: ['ol', 'v0'] },
-        // split overlay stream to add fadeout
         { filter: 'format', options: 'rgba', inputs: 'ol', outputs: 'olrgba' },
-        // hard-disable overlay as soon as captions start to guarantee no overlap
         { filter: 'overlay', options: `x=0:y=0:format=auto:enable='lt(t,${Math.max(0.1, titleDuration)})'`, inputs: ['v0', 'olrgba'], outputs: 'vtmp' },
-        // burn subtitles (centered one-word) starting just after title
+        // burn subtitles after title
         { filter: 'ass', options: `filename=${subsPath}:original_size=1080x1920`, inputs: 'vtmp', outputs: 'vout' },
+        // [MOD] concat title+story audio: aevalsrc for silence pad to exact titleDuration
+        { filter: 'aevalsrc', options: `0|0:d=${Math.max(0.01, titleDuration)}`, outputs: 'asil' },
+        { filter: 'anull', inputs: '2:a', outputs: 'a_title' },
+        { filter: 'anull', inputs: '3:a', outputs: 'a_story' },
+        { filter: 'amix', options: 'inputs=2:weights=1 0:normalize=0', inputs: ['a_title','asil'], outputs: 'a_title_padded' },
+        { filter: 'concat', options: 'n=2:v=0:a=1', inputs: ['a_title_padded','a_story'], outputs: 'aout' }
       ])
       .outputOptions([
         '-map', '[vout]',
-        // Map story audio input directly (ffmpeg will decode MP3 and encode to AAC)
-        '-map', '3:a',
+        '-map', '[aout]',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
@@ -1234,7 +1182,7 @@ async function compositeWithComplexFilter(
       ])
       .on('start', (cmd: any) => {
         console.log(`[${videoId}] ▶️ ffmpeg (timed overlay) command: ${cmd}`);
-        console.log(`[${videoId}] ▶️ mapping: video=[vout] audio=3:a`);
+        console.log(`[${videoId}] ▶️ mapping: video=[vout] audio=[aout]`);
         console.log(`[${videoId}] ▶️ inputs: 0=${bgPath}, 1=${overlayPath}, 2=${titleAudioPath}, 3=${storyAudioPath}`);
       })
       .on('stderr', (line: any) => {
@@ -1253,7 +1201,6 @@ async function compositeWithComplexFilter(
   });
 }
 
-
 async function compositeWithSimpleMapping(
   params: { bgPath: string; overlayPath: string; outputPath: string; titleAudioPath: string; storyAudioPath: string; titleDuration: number; totalDuration: number; subsPath: string; measuredStory: number },
   videoId: string
@@ -1264,12 +1211,12 @@ async function compositeWithSimpleMapping(
   await new Promise<void>((resolve, reject) => {
     console.log(`[${videoId}] 🔄 Using simple container mapping fallback`);
     ffmpeg()
-      .input(bgPath)
-      .input(overlayPath)
-      .input(storyAudioPath)
+      .input(bgPath)        // 0
+      .input(overlayPath)   // 1
+      .input(storyAudioPath)// 2
       .outputOptions([
-        '-map', '0:v',  // Background video
-        '-map', '2:a',  // Story audio directly
+        '-map', '0:v',
+        '-map', '2:a',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '23',
