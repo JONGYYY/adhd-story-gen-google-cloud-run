@@ -43,16 +43,22 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
     const fallbackMale = 'en-US-GuyNeural';
     const fallbackFemale = 'en-US-JennyNeural';
     if (voice?.id) {
-      const id = voice.id.toLowerCase();
+      const id = (voice.id as string).toLowerCase();
       if (id === 'adam' || id === 'brian' || voice.gender === 'male') return fallbackMale;
       if (id === 'sarah' || id === 'laura' || id === 'rachel' || voice.gender === 'female') return fallbackFemale;
     }
     return voice.gender === 'female' ? fallbackFemale : fallbackMale;
   })();
   const escapeXml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const ssml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<speak version=\"1.0\" xml:lang=\"en-US\" xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"http://www.w3.org/2001/mstts\">\n  <voice name=\"${azureVoice}\">\n    <prosody rate=\"0%\" pitch=\"0%\">${escapeXml(text)}</prosody>\n  </voice>\n</speak>`;
+  const ssml = `<?xml version="1.0" encoding="UTF-8"?>
+<speak version="1.0" xml:lang="en-US" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts">
+  <voice name="${azureVoice}">
+    <prosody rate="0%" pitch="0%">${escapeXml(text)}</prosody>
+  </voice>
+</speak>`;
   const baseUrl = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
+  // SSML WAV attempt
   const resp1 = await fetch(baseUrl, {
     method: 'POST',
     headers: {
@@ -76,6 +82,7 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
     console.warn(`Azure TTS SSML failed: ${resp1.status} ${resp1.statusText} ${t}`);
   }
 
+  // Plain MP3 attempt
   const resp2 = await fetch(baseUrl, {
     method: 'POST',
     headers: {
@@ -98,6 +105,7 @@ async function generateSpeechAzure({ text, voice }: TextToSpeechOptions): Promis
     console.warn(`Azure TTS plain failed: ${resp2.status} ${resp2.statusText} ${t}`);
   }
 
+  // Alt WAV attempt
   const resp3 = await fetch(baseUrl, {
     method: 'POST',
     headers: {
@@ -127,6 +135,7 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
   console.log("[TTS] Starting speech generation...");
   console.log("[TTS] Input:", { text: text?.slice(0, 40) + (text?.length > 40 ? "..." : ""), voice });
 
+  // [MOD] Normalize provider env and default
   const provider = ((globalThis as any)?.process?.env?.TTS_PROVIDER || "elevenlabs").toLowerCase();
   console.log(`[TTS] Selected provider: ${provider}`);
 
@@ -245,6 +254,8 @@ export async function generateSpeech({ text, voice }: TextToSpeechOptions): Prom
   throw lastError || new Error("TTS failed after retries");
 }
 
+// [MOD] This legacy helper is not used by the Remotion path; keep for compatibility with old code.
+//       Do NOT rely on byte-size math for duration where ffprobe is available.
 export async function getAudioDuration(audioBuffer: ArrayBuffer): Promise<number> {
   try {
     const BYTES_PER_SECOND = 24000;
@@ -254,4 +265,4 @@ export async function getAudioDuration(audioBuffer: ArrayBuffer): Promise<number
     console.error('Error calculating audio duration:', error);
     throw error;
   }
-} 
+}
